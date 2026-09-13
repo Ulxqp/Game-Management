@@ -1,6 +1,60 @@
 # Hardware Squisher changelog
 
-## 1.6.0 — current
+## 1.10.0 — current
+
+- Added a read-only MSI Afterburner CPU-temperature source for systems whose Lenovo/Windows sensor interface is unavailable.
+- Reads only the official `MAHMSharedMemory` monitoring entry for CPU temperature; it cannot apply profiles or change clocks, voltage, power limits, fans, or thermal controls.
+- Validates the shared-memory signature, version, sizes, entry count, buffer bounds, source ID, and plausible temperature range before displaying a value.
+- Retains the existing Lenovo and Windows temperature fallbacks when MSI Afterburner is not running.
+
+## 1.9.3
+
+- Matched Hide activity to the exact width, height, and horizontal alignment of Open log and Diagnostics at every supported window size.
+- Kept all other main-interface controls unchanged.
+
+## 1.9.2
+
+- Replaced the secondary-dialog buttons' variable Windows focus border with a fixed Windows 98 raised/sunken border.
+- Buttons keep the same border thickness while idle, focused, and clicked; clicking still gives the normal inset pressed effect.
+- Kept the main interface unchanged.
+
+## 1.9.1
+
+- Restyled the timer alarm and game-session summary as consistent Windows 98 dialogs.
+- Added the same navy title bar, gray surface, raised frame, inset status areas, and classic beveled buttons used by the main interface.
+- Kept the main interface completely unchanged.
+- Added render checks for both secondary dialogs and a safety assertion that prevents either window from silently returning to modern styling.
+
+## 1.9.0
+
+- Replaced CPU/GPU workload percentages with live temperatures and per-session peak temperatures.
+- Added plain color conditions: green Safe, orange Warm, and red Danger, using conservative limits for this laptop's Intel Core i5-12450HX and RTX 3050 Laptop GPU.
+- Added safe sensor fallbacks. Unsupported or permission-blocked CPU temperature sensors show Unavailable instead of using a privileged hardware driver.
+- Session summaries and `GameSessionHistory.txt` now record peak temperatures in °C.
+- Removed the permanent heavy default-button outline from the session-summary Close button while keeping Escape-to-close support.
+- Added `TEMPERATURE-GUIDE.md` with the limits, meaning, and source links.
+
+## 1.8.0
+
+- Added an enabled-by-default option to press Escape on the detected game when a break starts and ends.
+- Escape input is target-verified: the watcher selects the detected game window, brings it forward, verifies focus, and cancels safely if focus fails.
+- The main Hardware Squisher interface now appears automatically at break start and hides to the notification area at break end.
+- Added live CPU and GPU usage with per-game-session peak percentages, refreshed every second. Replaced by temperature monitoring in 1.9.0.
+- Added a simple session summary when the final game process exits.
+- Added `GameSessionHistory.txt`, recording the game, date, start/end time, total game time, timer cycles, and peak CPU/GPU use.
+- Added safety checks for targeted Escape input, break-window signaling, live performance sampling, and session history.
+- Matched the Hide activity button height and border spacing to the other action buttons.
+
+## 1.7.0
+
+- Replaced the one-time timer chime with a topmost alarm that repeats until **Stop alarm** is pressed.
+- Rewrote the timer alerts in shorter, plain language: **Time for a break!** and **Break over!**
+- Added friendly duration formatting, including seconds for short test alarms.
+- Added safety checks that confirm the alarm timer stops and is disposed when the alert closes.
+- Included the application source with installed copies so the local safety test can inspect the alarm implementation.
+- Made package-only installer checks skip cleanly when the safety suite is run from the installed runtime folder.
+
+## 1.6.0
 
 - Added informational detection for NVIDIA GeForce RTX 20- and 30-series desktop, Ti, SUPER, and Laptop GPU names.
 - Added a non-mutating compatibility self-test to the installer build.

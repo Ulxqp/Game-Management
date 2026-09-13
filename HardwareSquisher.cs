@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
@@ -19,16 +20,87 @@ namespace HardwareSquisher
         private static void Main(string[] args)
         {
             Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Length >= 1 && string.Equals(args[0], "--break-ui-show", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!UiSignals.TrySignal(UiSignals.ShowBreakName))
+                    Application.Run(new MainForm(false, true));
+                return;
+            }
+            if (args.Length >= 1 && string.Equals(args[0], "--break-ui-hide", StringComparison.OrdinalIgnoreCase))
+            {
+                UiSignals.TrySignal(UiSignals.HideBreakName);
+                return;
+            }
+            if (args.Length >= 1 && string.Equals(args[0], "--ui-start-hidden", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!UiSignals.Exists(UiSignals.ShowBreakName))
+                    Application.Run(new MainForm(false, false, true));
+                return;
+            }
+            if (args.Length >= 1 && string.Equals(args[0], "--session-summary", StringComparison.OrdinalIgnoreCase))
+            {
+                string summaryPath = args.Length >= 2
+                    ? args[1]
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "last-session.json");
+                if (File.Exists(summaryPath))
+                {
+                    try
+                    {
+                        JavaScriptSerializer serializer = new JavaScriptSerializer();
+                        GameSessionSummary summary = serializer.Deserialize<GameSessionSummary>(File.ReadAllText(summaryPath));
+                        Application.Run(new SessionSummaryForm(summary));
+                    }
+                    catch
+                    {
+                        MessageBox.Show("The saved game summary could not be opened.", "Hardware Squisher", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
+                return;
+            }
+            if (args.Length >= 2 && string.Equals(args[0], "--render-session-summary", StringComparison.OrdinalIgnoreCase))
+            {
+                GameSessionSummary preview = new GameSessionSummary
+                {
+                    Game = "Example Game",
+                    StartedAt = "2026-09-13 13:00:00",
+                    EndedAt = "2026-09-13 14:15:00",
+                    DurationText = "1 hr 15 min",
+                    Cycles = 3,
+                    PeakCpu = "Unavailable",
+                    PeakGpu = "78°C"
+                };
+                using (SessionSummaryForm form = new SessionSummaryForm(preview))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    using (Bitmap image = new Bitmap(form.Width, form.Height))
+                    {
+                        form.DrawToBitmap(image, new Rectangle(0, 0, image.Width, image.Height));
+                        image.Save(args[1], System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                }
+                return;
+            }
+            if (args.Length >= 2 && string.Equals(args[0], "--render-timer-alert", StringComparison.OrdinalIgnoreCase))
+            {
+                using (TimerAlertForm form = new TimerAlertForm("game-finished", "30", "5", true))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    using (Bitmap image = new Bitmap(form.Width, form.Height))
+                    {
+                        form.DrawToBitmap(image, new Rectangle(0, 0, image.Width, image.Height));
+                        image.Save(args[1], System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                }
+                return;
+            }
             if (args.Length >= 1 && string.Equals(args[0], "--timer-alert", StringComparison.OrdinalIgnoreCase))
             {
                 string alertType = args.Length >= 2 ? args[1] : "game-finished";
                 string finishedMinutes = args.Length >= 3 ? args[2] : "30";
                 string nextMinutes = args.Length >= 4 ? args[3] : "5";
-                string message = alertType == "break-finished"
-                    ? "Your " + finishedMinutes + "-minute break is finished. A new " + nextMinutes + "-minute game timer has started."
-                    : "Your " + finishedMinutes + "-minute game timer is finished. Take a " + nextMinutes + "-minute break.";
-                System.Media.SystemSounds.Exclamation.Play();
-                MessageBox.Show(message, "Hardware Squisher Timer", MessageBoxButtons.OK, MessageBoxIcon.None);
+                Application.Run(new TimerAlertForm(alertType, finishedMinutes, nextMinutes));
                 return;
             }
             if (args.Length >= 2 && string.Equals(args[0], "--render", StringComparison.OrdinalIgnoreCase))
@@ -67,6 +139,301 @@ namespace HardwareSquisher
         }
     }
 
+    internal static class UiSignals
+    {
+        internal const string ShowBreakName = @"Local\HardwareSquisherShowBreak_v1";
+        internal const string HideBreakName = @"Local\HardwareSquisherHideBreak_v1";
+
+        internal static bool TrySignal(string name)
+        {
+            try
+            {
+                using (System.Threading.EventWaitHandle signal = System.Threading.EventWaitHandle.OpenExisting(name))
+                {
+                    return signal.Set();
+                }
+            }
+            catch (System.Threading.WaitHandleCannotBeOpenedException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+        }
+
+        internal static bool Exists(string name)
+        {
+            try
+            {
+                using (System.Threading.EventWaitHandle signal = System.Threading.EventWaitHandle.OpenExisting(name)) { return true; }
+            }
+            catch (System.Threading.WaitHandleCannotBeOpenedException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+        }
+    }
+
+    internal sealed class RetroDialogButton : Button
+    {
+        private bool pressed;
+
+        public RetroDialogButton()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            FlatStyle = FlatStyle.Standard;
+            UseVisualStyleBackColor = false;
+            BackColor = Color.FromArgb(192, 192, 192);
+            ForeColor = Color.Black;
+            TabStop = false;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Rectangle bounds = ClientRectangle;
+            e.Graphics.Clear(Enabled ? BackColor : Color.FromArgb(192, 192, 192));
+            ControlPaint.DrawBorder3D(e.Graphics, bounds, pressed ? Border3DStyle.Sunken : Border3DStyle.Raised);
+            Rectangle textBounds = new Rectangle(
+                bounds.X + (pressed ? 2 : 1),
+                bounds.Y + (pressed ? 2 : 1),
+                Math.Max(0, bounds.Width - 3),
+                Math.Max(0, bounds.Height - 3));
+            TextRenderer.DrawText(
+                e.Graphics,
+                Text,
+                Font,
+                textBounds,
+                Enabled ? ForeColor : SystemColors.GrayText,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) pressed = true;
+            Invalidate();
+            base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            pressed = false;
+            Invalidate();
+            base.OnMouseUp(e);
+        }
+
+        protected override void OnMouseCaptureChanged(EventArgs e)
+        {
+            pressed = false;
+            Invalidate();
+            base.OnMouseCaptureChanged(e);
+        }
+    }
+
+    internal abstract class RetroDialogForm : Form
+    {
+        private const int WmNclButtonDown = 0xA1;
+        private const int HtCaption = 0x2;
+
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        protected Panel ContentPanel { get; private set; }
+
+        protected void BuildRetroChrome(string caption)
+        {
+            Text = caption;
+            FormBorderStyle = FormBorderStyle.None;
+            BackColor = Color.FromArgb(192, 192, 192);
+            Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Regular, GraphicsUnit.Point);
+            Padding = new Padding(3);
+
+            Panel titleBar = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 28,
+                BackColor = Color.FromArgb(0, 0, 128)
+            };
+            titleBar.MouseDown += DragWindow;
+
+            Label title = new Label
+            {
+                Text = "▣  " + caption,
+                ForeColor = Color.White,
+                Font = new Font("Microsoft Sans Serif", 9F, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(5, 6)
+            };
+            title.MouseDown += DragWindow;
+            titleBar.Controls.Add(title);
+
+            Button close = RetroButton("×", 24, 21);
+            close.Dock = DockStyle.Right;
+            close.TabStop = false;
+            close.Click += delegate { Close(); };
+            titleBar.Controls.Add(close);
+            Controls.Add(titleBar);
+
+            ContentPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(192, 192, 192)
+            };
+            Controls.Add(ContentPanel);
+            ContentPanel.BringToFront();
+        }
+
+        protected static Button RetroButton(string text, int width, int height)
+        {
+            return new RetroDialogButton
+            {
+                Text = text,
+                Size = new Size(width, height),
+                Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Regular)
+            };
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            ControlPaint.DrawBorder3D(e.Graphics, ClientRectangle, Border3DStyle.Raised);
+        }
+
+        private void DragWindow(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            ReleaseCapture();
+            SendMessage(Handle, WmNclButtonDown, HtCaption, 0);
+        }
+    }
+
+    internal sealed class TimerAlertForm : RetroDialogForm
+    {
+        private readonly Timer soundTimer = new Timer();
+        private readonly bool previewOnly;
+
+        public TimerAlertForm(string alertType, string finishedMinutes, string nextMinutes, bool previewOnly = false)
+        {
+            this.previewOnly = previewOnly;
+            bool breakFinished = string.Equals(alertType, "break-finished", StringComparison.OrdinalIgnoreCase);
+            string heading = breakFinished ? "Break over!" : "Time for a break!";
+            string timerName = breakFinished ? "Game timer" : "Break timer";
+            string message = breakFinished ? "You can play again." : "Your game time is up.";
+
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(440, 230);
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = true;
+            TopMost = true;
+            KeyPreview = true;
+            BuildRetroChrome("Hardware Squisher Alarm");
+
+            Label headingLabel = new Label
+            {
+                AutoSize = false,
+                Location = new Point(22, 18),
+                Size = new Size(390, 31),
+                Font = new Font("Arial", 17F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                Text = heading
+            };
+
+            Panel messagePanel = new Panel
+            {
+                Location = new Point(21, 56),
+                Size = new Size(396, 76),
+                BackColor = Color.FromArgb(255, 255, 255),
+                BorderStyle = BorderStyle.Fixed3D
+            };
+
+            Label warningIcon = new Label
+            {
+                Text = "!",
+                TextAlign = ContentAlignment.MiddleCenter,
+                Location = new Point(12, 17),
+                Size = new Size(35, 35),
+                BackColor = Color.Yellow,
+                ForeColor = Color.Black,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Arial", 18F, FontStyle.Bold)
+            };
+            messagePanel.Controls.Add(warningIcon);
+
+            Label messageLabel = new Label
+            {
+                AutoSize = false,
+                Location = new Point(61, 15),
+                Size = new Size(315, 48),
+                Font = new Font("Microsoft Sans Serif", 9F, FontStyle.Regular),
+                ForeColor = Color.Black,
+                Text = message + Environment.NewLine + timerName + ": " + FormatDuration(nextMinutes) + "."
+            };
+            messagePanel.Controls.Add(messageLabel);
+
+            Button stopButton = RetroButton("Stop alarm", 104, 25);
+            stopButton.Location = new Point(313, 151);
+            stopButton.Click += delegate { Close(); };
+
+            Label status = new Label
+            {
+                Text = "Alarm is sounding",
+                BorderStyle = BorderStyle.Fixed3D,
+                Location = new Point(21, 154),
+                Size = new Size(275, 20),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            ContentPanel.Controls.Add(headingLabel);
+            ContentPanel.Controls.Add(messagePanel);
+            ContentPanel.Controls.Add(status);
+            ContentPanel.Controls.Add(stopButton);
+            CancelButton = stopButton;
+
+            soundTimer.Interval = 1500;
+            soundTimer.Tick += delegate { PlayAlarmSound(); };
+            Shown += delegate
+            {
+                if (!this.previewOnly)
+                {
+                    PlayAlarmSound();
+                    soundTimer.Start();
+                }
+                Activate();
+                ActiveControl = null;
+            };
+            FormClosed += delegate
+            {
+                soundTimer.Stop();
+                soundTimer.Dispose();
+            };
+        }
+
+        private static string FormatDuration(string minutesText)
+        {
+            decimal minutes;
+            if (!decimal.TryParse(minutesText, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out minutes))
+                return minutesText + " minutes";
+
+            if (minutes > 0 && minutes < 1)
+            {
+                int seconds = (int)Math.Round(minutes * 60, MidpointRounding.AwayFromZero);
+                return seconds == 1 ? "1 second" : seconds + " seconds";
+            }
+
+            decimal rounded = decimal.Round(minutes, 2);
+            return rounded == 1 ? "1 minute" : rounded.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " minutes";
+        }
+
+        private static void PlayAlarmSound()
+        {
+            try
+            {
+                System.Media.SystemSounds.Exclamation.Play();
+            }
+            catch
+            {
+                // The alert stays visible if Windows cannot play a system sound.
+            }
+        }
+    }
+
     internal sealed class GameSettings
     {
         public int pollSeconds { get; set; }
@@ -74,8 +441,95 @@ namespace HardwareSquisher
         public bool gameTimerEnabled { get; set; }
         public int gameTimerMinutes { get; set; }
         public int breakTimerMinutes { get; set; }
+        public bool pauseGameWithEscape { get; set; }
         public string[] gameFolders { get; set; }
         public string[] excludedProcesses { get; set; }
+    }
+
+    internal sealed class GameSessionSummary
+    {
+        public string Game { get; set; }
+        public string StartedAt { get; set; }
+        public string EndedAt { get; set; }
+        public string DurationText { get; set; }
+        public int Cycles { get; set; }
+        public string PeakCpu { get; set; }
+        public string PeakGpu { get; set; }
+    }
+
+    internal sealed class SessionSummaryForm : RetroDialogForm
+    {
+        public SessionSummaryForm(GameSessionSummary summary)
+        {
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(490, 370);
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = true;
+            TopMost = true;
+            BuildRetroChrome("Hardware Squisher - Session saved");
+
+            Label heading = new Label
+            {
+                Text = "GAME SESSION FINISHED",
+                Location = new Point(20, 14),
+                Size = new Size(445, 31),
+                Font = new Font("Arial", 17F, FontStyle.Bold),
+                ForeColor = Color.Black
+            };
+            ContentPanel.Controls.Add(heading);
+
+            string details =
+                "Game: " + Safe(summary.Game) + Environment.NewLine +
+                "Played: " + Safe(summary.DurationText) + Environment.NewLine +
+                "Timer cycles: " + summary.Cycles + Environment.NewLine +
+                "Peak CPU temp: " + Safe(summary.PeakCpu) + Environment.NewLine +
+                "Peak GPU temp: " + Safe(summary.PeakGpu) + Environment.NewLine +
+                "Started: " + Safe(summary.StartedAt) + Environment.NewLine +
+                "Finished: " + Safe(summary.EndedAt);
+
+            GroupBox detailsGroup = new GroupBox
+            {
+                Text = "Session summary",
+                Location = new Point(20, 51),
+                Size = new Size(445, 221)
+            };
+            ContentPanel.Controls.Add(detailsGroup);
+
+            Label detailsLabel = new Label
+            {
+                Text = details,
+                Location = new Point(15, 24),
+                Size = new Size(410, 178),
+                Font = new Font("Microsoft Sans Serif", 9F, FontStyle.Regular),
+                ForeColor = Color.Black
+            };
+            detailsGroup.Controls.Add(detailsLabel);
+
+            Label savedLabel = new Label
+            {
+                Text = "Saved in GameSessionHistory.txt",
+                Location = new Point(20, 287),
+                Size = new Size(320, 20),
+                BorderStyle = BorderStyle.Fixed3D,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.Black,
+                Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Regular)
+            };
+            ContentPanel.Controls.Add(savedLabel);
+
+            Button closeButton = RetroButton("Close", 104, 25);
+            closeButton.Location = new Point(361, 284);
+            closeButton.Click += delegate { Close(); };
+            closeButton.DialogResult = DialogResult.Cancel;
+            ContentPanel.Controls.Add(closeButton);
+            CancelButton = closeButton;
+        }
+
+        private static string Safe(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "Unavailable" : value;
+        }
     }
 
     internal sealed class PixelGerberaPanel : Control
@@ -210,6 +664,7 @@ namespace HardwareSquisher
         private readonly string logPath;
         private readonly string statePath;
         private readonly string timerStatePath;
+        private readonly string performanceStatePath;
         private readonly string engineEnabledPath;
         private readonly string watcherPath;
         private readonly string installerPath;
@@ -217,10 +672,20 @@ namespace HardwareSquisher
 
         private readonly Timer refreshTimer = new Timer();
         private readonly Timer countdownTimer = new Timer();
+        private readonly Timer performanceTimer = new Timer();
+        private readonly Timer breakUiTimer = new Timer();
         private readonly Timer panelFlipTimer = new Timer();
         private readonly NotifyIcon trayIcon = new NotifyIcon();
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly bool enableOnStart;
+        private readonly bool showForBreakOnStart;
+        private readonly bool hideOnStart;
+        private System.Threading.EventWaitHandle showBreakEvent;
+        private System.Threading.EventWaitHandle hideBreakEvent;
+        private float? peakCpuTemperature;
+        private float? peakGpuTemperature;
+        private bool boostStateKnown;
+        private bool previousBoostState;
         private DateTime lastWatcherStartAttempt = DateTime.MinValue;
         private bool exiting;
         private GameSettings settings;
@@ -232,6 +697,8 @@ namespace HardwareSquisher
         private Label timerValue;
         private Label minutesLeftValue;
         private Label cycleValue;
+        private Label cpuTemperatureValue;
+        private Label gpuTemperatureValue;
         private Label watcherValue;
         private Panel statusLamp;
         private GroupBox statusGroup;
@@ -245,6 +712,7 @@ namespace HardwareSquisher
         private NumericUpDown timerMinutesInput;
         private NumericUpDown breakMinutesInput;
         private CheckBox timerEnabledCheck;
+        private CheckBox pauseWithEscapeCheck;
         private CheckBox startupCheck;
         private CheckBox trayCheck;
         private ListBox foldersList;
@@ -271,11 +739,13 @@ namespace HardwareSquisher
             }
         }
 
-        public MainForm(bool enableOnStart)
+        public MainForm(bool enableOnStart, bool showForBreakOnStart = false, bool hideOnStart = false)
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             UpdateStyles();
             this.enableOnStart = enableOnStart;
+            this.showForBreakOnStart = showForBreakOnStart;
+            this.hideOnStart = hideOnStart;
             string documentsRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameBoost");
             rootPath = File.Exists(Path.Combine(documentsRoot, "HardwareSquisher.ps1"))
                 ? documentsRoot
@@ -284,6 +754,7 @@ namespace HardwareSquisher
             logPath = Path.Combine(rootPath, "HardwareSquisher.log");
             statePath = Path.Combine(rootPath, "runtime-state.json");
             timerStatePath = Path.Combine(rootPath, "timer-state.json");
+            performanceStatePath = Path.Combine(rootPath, "performance-state.json");
             engineEnabledPath = Path.Combine(rootPath, "engine-enabled.flag");
             watcherPath = Path.Combine(rootPath, "HardwareSquisher.ps1");
             installerPath = Path.Combine(rootPath, "Install-HardwareSquisher.ps1");
@@ -291,6 +762,7 @@ namespace HardwareSquisher
 
             BuildWindow();
             BuildTrayIcon();
+            InitializeUiSignals();
             LoadSettings();
             RefreshStatus();
 
@@ -304,6 +776,15 @@ namespace HardwareSquisher
                 RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
             };
             countdownTimer.Start();
+
+            performanceTimer.Interval = 1000;
+            performanceTimer.Tick += delegate { RefreshTemperatureMetrics(); };
+            performanceTimer.Start();
+            RefreshTemperatureMetrics();
+
+            breakUiTimer.Interval = 200;
+            breakUiTimer.Tick += delegate { CheckBreakUiSignals(); };
+            breakUiTimer.Start();
         }
 
         private void BuildWindow()
@@ -369,7 +850,7 @@ namespace HardwareSquisher
             subtitle.Location = new Point(21, 53);
             body.Controls.Add(subtitle);
 
-            statusGroup = RetroGroup("Current status", 20, 82, 375, 234);
+            statusGroup = RetroGroup("Current status", 20, 82, 375, 248);
             body.Controls.Add(statusGroup);
 
             statusSurface = new Panel();
@@ -395,14 +876,16 @@ namespace HardwareSquisher
             statusLamp.BorderStyle = BorderStyle.Fixed3D;
             statusFrontPanel.Controls.Add(statusLamp);
 
-            AddValueRow(statusFrontPanel, "Mode:", 29, out statusValue);
-            AddValueRow(statusFrontPanel, "Detected game:", 51, out gameValue);
-            AddValueRow(statusFrontPanel, "Power plan:", 73, out planValue);
-            AddValueRow(statusFrontPanel, "Brightness:", 95, out brightnessValue);
-            AddValueRow(statusFrontPanel, "Timer phase:", 117, out timerValue);
-            AddValueRow(statusFrontPanel, "Minutes left:", 139, out minutesLeftValue);
-            AddValueRow(statusFrontPanel, "Cycle:", 161, out cycleValue);
-            AddValueRow(statusFrontPanel, "Watcher:", 187, out watcherValue);
+            AddValueRow(statusFrontPanel, "Mode:", 27, out statusValue);
+            AddValueRow(statusFrontPanel, "Detected game:", 47, out gameValue);
+            AddValueRow(statusFrontPanel, "Power plan:", 67, out planValue);
+            AddValueRow(statusFrontPanel, "Brightness:", 87, out brightnessValue);
+            AddValueRow(statusFrontPanel, "Timer phase:", 107, out timerValue);
+            AddValueRow(statusFrontPanel, "Minutes left:", 127, out minutesLeftValue);
+            AddValueRow(statusFrontPanel, "Cycle:", 147, out cycleValue);
+            AddValueRow(statusFrontPanel, "CPU temp / peak:", 167, out cpuTemperatureValue);
+            AddValueRow(statusFrontPanel, "GPU temp / peak:", 187, out gpuTemperatureValue);
+            AddValueRow(statusFrontPanel, "Watcher:", 207, out watcherValue);
 
             flipStatusButton = RetroButton("Flowers", 64, 22);
             flipStatusButton.Location = new Point(statusFrontPanel.ClientSize.Width - 68, 2);
@@ -505,6 +988,12 @@ namespace HardwareSquisher
             };
             settingsGroup.Controls.Add(startupCheck);
 
+            pauseWithEscapeCheck = new CheckBox();
+            pauseWithEscapeCheck.Text = "Press Escape at break start/end";
+            pauseWithEscapeCheck.Location = new Point(16, 153);
+            pauseWithEscapeCheck.AutoSize = true;
+            settingsGroup.Controls.Add(pauseWithEscapeCheck);
+
             GroupBox foldersGroup = RetroGroup("Game library folders", 20, 330, 764, 142);
             foldersGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             body.Controls.Add(foldersGroup);
@@ -567,7 +1056,7 @@ namespace HardwareSquisher
             trayCheck.Location = new Point(22, 558);
             body.Controls.Add(trayCheck);
 
-            toggleLogButton = RetroButton("Hide activity", 104, 22);
+            toggleLogButton = RetroButton("Hide activity", 92, 25);
             toggleLogButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             toggleLogButton.Click += delegate { ToggleActivity(); };
             body.Controls.Add(toggleLogButton);
@@ -621,14 +1110,16 @@ namespace HardwareSquisher
                 footerLabel.Top = body.ClientSize.Height - footerLabel.Height - 7;
                 footerLabel.Width = contentWidth;
                 trayCheck.Top = footerLabel.Top - trayCheck.Height - 4;
-                toggleLogButton.Left = body.ClientSize.Width - contentMargin - toggleLogButton.Width;
-                toggleLogButton.Top = trayCheck.Top - 2;
+                toggleLogButton.Top = trayCheck.Top - 4;
                 logGroup.Height = Math.Max(82, trayCheck.Top - logGroup.Top - 8);
 
                 int logPadding = 13;
                 int logGap = 10;
                 int actionWidth = Math.Max(92, Math.Min(130, logGroup.ClientSize.Width / 7));
                 int actionLeft = logGroup.ClientSize.Width - logPadding - actionWidth;
+                toggleLogButton.Left = logGroup.Left + actionLeft;
+                toggleLogButton.Width = actionWidth;
+                toggleLogButton.Height = 25;
                 logBox.Width = Math.Max(220, actionLeft - logBox.Left - logGap);
                 logBox.Height = Math.Max(45, logGroup.ClientSize.Height - 38);
                 openLog.Left = actionLeft;
@@ -645,7 +1136,210 @@ namespace HardwareSquisher
             {
                 RefreshStatus();
                 if (enableOnStart && !IsWatcherRunning()) EnableGameBoost(false);
+                if (showForBreakOnStart) ShowForBreak();
+                else if (hideOnStart) HideAfterBreak();
             };
+        }
+
+        private void InitializeUiSignals()
+        {
+            bool created;
+            showBreakEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.ShowBreakName, out created);
+            hideBreakEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.HideBreakName, out created);
+        }
+
+        private void CheckBreakUiSignals()
+        {
+            if (showBreakEvent != null && showBreakEvent.WaitOne(0)) ShowForBreak();
+            if (hideBreakEvent != null && hideBreakEvent.WaitOne(0)) HideAfterBreak();
+        }
+
+        private void ShowForBreak()
+        {
+            ShowFromTray();
+            TopMost = true;
+            BringToFront();
+            SetFooter("Break started. Break timer is running.");
+        }
+
+        private void HideAfterBreak()
+        {
+            TopMost = false;
+            Hide();
+            ShowInTaskbar = false;
+        }
+
+        private void RefreshTemperatureMetrics()
+        {
+            float? cpuTemperature = ReadCpuTemperature();
+            float? gpuTemperature = ReadGpuTemperature();
+            if (cpuTemperature.HasValue)
+                peakCpuTemperature = !peakCpuTemperature.HasValue ? cpuTemperature : Math.Max(peakCpuTemperature.Value, cpuTemperature.Value);
+            if (gpuTemperature.HasValue)
+                peakGpuTemperature = !peakGpuTemperature.HasValue ? gpuTemperature : Math.Max(peakGpuTemperature.Value, gpuTemperature.Value);
+
+            SetTemperatureLabel(cpuTemperatureValue, cpuTemperature, peakCpuTemperature, true);
+            SetTemperatureLabel(gpuTemperatureValue, gpuTemperature, peakGpuTemperature, false);
+            WriteTemperatureSnapshot(cpuTemperature, gpuTemperature);
+        }
+
+        private float? ReadCpuTemperature()
+        {
+            float? afterburnerTemperature = ReadAfterburnerCpuTemperature();
+            if (afterburnerTemperature.HasValue) return afterburnerTemperature;
+
+            float? lenovoTemperature = ReadLenovoTemperature("GetCPUTemp");
+            if (lenovoTemperature.HasValue) return lenovoTemperature;
+
+            try
+            {
+                ManagementScope scope = new ManagementScope(@"\\.\root\WMI");
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery("SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature")))
+                {
+                    float? hottest = null;
+                    foreach (ManagementObject zone in searcher.Get())
+                    {
+                        float celsius = Convert.ToSingle(zone["CurrentTemperature"], System.Globalization.CultureInfo.InvariantCulture) / 10F - 273.15F;
+                        if (celsius >= 10F && celsius <= 125F)
+                            hottest = !hottest.HasValue ? celsius : Math.Max(hottest.Value, celsius);
+                    }
+                    return hottest;
+                }
+            }
+            catch { return null; }
+        }
+
+        private float? ReadAfterburnerCpuTemperature()
+        {
+            const uint MahMatureSignature = 0x4D41484D;
+            const uint CpuTemperatureSourceId = 0x00000080;
+            const long MinimumHeaderSize = 32;
+            const long MinimumEntrySize = 1324;
+            const long DataOffset = 1300;
+            const long SourceIdOffset = 1320;
+
+            try
+            {
+                using (MemoryMappedFile map = MemoryMappedFile.OpenExisting("MAHMSharedMemory", MemoryMappedFileRights.Read))
+                using (MemoryMappedViewAccessor view = map.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read))
+                {
+                    uint signature = view.ReadUInt32(0);
+                    uint version = view.ReadUInt32(4);
+                    uint headerSize = view.ReadUInt32(8);
+                    uint entryCount = view.ReadUInt32(12);
+                    uint entrySize = view.ReadUInt32(16);
+
+                    if (signature != MahMatureSignature || version < 0x00020000) return null;
+                    if (headerSize < MinimumHeaderSize || entrySize < MinimumEntrySize || entryCount == 0 || entryCount > 512) return null;
+
+                    long capacity = view.Capacity;
+                    long requiredSize = (long)headerSize + (long)entryCount * entrySize;
+                    if (requiredSize <= 0 || requiredSize > capacity) return null;
+
+                    for (uint index = 0; index < entryCount; index++)
+                    {
+                        long entryOffset = (long)headerSize + (long)index * entrySize;
+                        if (view.ReadUInt32(entryOffset + SourceIdOffset) != CpuTemperatureSourceId) continue;
+                        float temperature = view.ReadSingle(entryOffset + DataOffset);
+                        if (!float.IsNaN(temperature) && !float.IsInfinity(temperature) && temperature >= 10F && temperature <= 125F)
+                            return temperature;
+                    }
+                }
+            }
+            catch (FileNotFoundException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+            catch (ArgumentException) { }
+            return null;
+        }
+
+        private float? ReadGpuTemperature()
+        {
+            try
+            {
+                string output = RunCapture("nvidia-smi.exe", "--query-gpu=temperature.gpu --format=csv,noheader,nounits");
+                string firstLine = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                float value;
+                if (!string.IsNullOrWhiteSpace(firstLine) && float.TryParse(firstLine.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value) && value >= 10F && value <= 125F)
+                    return value;
+            }
+            catch { }
+            return ReadLenovoTemperature("GetGPUTemp");
+        }
+
+        private float? ReadLenovoTemperature(string methodName)
+        {
+            try
+            {
+                ManagementScope scope = new ManagementScope(@"\\.\root\WMI");
+                ManagementPath path = new ManagementPath("LENOVO_GAMEZONE_DATA");
+                using (ManagementClass sensor = new ManagementClass(scope, path, null))
+                using (ManagementBaseObject result = sensor.InvokeMethod(methodName, null, null))
+                {
+                    if (result == null || result["Data"] == null) return null;
+                    float value = Convert.ToSingle(result["Data"], System.Globalization.CultureInfo.InvariantCulture);
+                    return value >= 10F && value <= 125F ? (float?)value : null;
+                }
+            }
+            catch { return null; }
+        }
+
+        private void WriteTemperatureSnapshot(float? cpuTemperature, float? gpuTemperature)
+        {
+            try
+            {
+                if (!File.Exists(statePath))
+                {
+                    if (File.Exists(performanceStatePath)) File.Delete(performanceStatePath);
+                    return;
+                }
+                Dictionary<string, object> snapshot = new Dictionary<string, object>();
+                snapshot["CurrentCpuC"] = cpuTemperature.HasValue ? (object)Math.Round(cpuTemperature.Value, 1) : null;
+                snapshot["PeakCpuC"] = peakCpuTemperature.HasValue ? (object)Math.Round(peakCpuTemperature.Value, 1) : null;
+                snapshot["CurrentGpuC"] = gpuTemperature.HasValue ? (object)Math.Round(gpuTemperature.Value, 1) : null;
+                snapshot["PeakGpuC"] = peakGpuTemperature.HasValue ? (object)Math.Round(peakGpuTemperature.Value, 1) : null;
+                snapshot["UpdatedAt"] = DateTime.Now.ToString("o");
+                File.WriteAllText(performanceStatePath, PrettyJson(json.Serialize(snapshot)), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        private static void SetTemperatureLabel(Label label, float? current, float? peak, bool cpu)
+        {
+            if (label == null) return;
+            if (!current.HasValue)
+            {
+                SetLabelText(label, "Unavailable");
+                label.ForeColor = Color.DimGray;
+                return;
+            }
+
+            float warmAt = cpu ? 80F : 75F;
+            float dangerAt = cpu ? 90F : 87F;
+            string condition;
+            if (current.Value >= dangerAt)
+            {
+                condition = "Danger";
+                label.ForeColor = Color.Red;
+            }
+            else if (current.Value >= warmAt)
+            {
+                condition = "Warm";
+                label.ForeColor = Color.DarkOrange;
+            }
+            else
+            {
+                condition = "Safe";
+                label.ForeColor = Color.Green;
+            }
+            string peakText = peak.HasValue ? Math.Round(peak.Value).ToString("0") : "--";
+            SetLabelText(label, Math.Round(current.Value).ToString("0") + "°C | " + peakText + "°C  " + condition);
+        }
+
+        private void ResetTemperaturePeaks()
+        {
+            peakCpuTemperature = null;
+            peakGpuTemperature = null;
         }
 
         private void StartStatusPanelFlip()
@@ -816,6 +1510,7 @@ namespace HardwareSquisher
                 settings = json.Deserialize<GameSettings>(settingsText);
                 Dictionary<string, object> settingsMap = json.Deserialize<Dictionary<string, object>>(settingsText);
                 if (!settingsMap.ContainsKey("gameTimerEnabled")) settings.gameTimerEnabled = true;
+                if (!settingsMap.ContainsKey("pauseGameWithEscape")) settings.pauseGameWithEscape = true;
             }
             catch
             {
@@ -826,6 +1521,7 @@ namespace HardwareSquisher
                     gameTimerEnabled = true,
                     gameTimerMinutes = 30,
                     breakTimerMinutes = 5,
+                    pauseGameWithEscape = true,
                     gameFolders = new string[0],
                     excludedProcesses = new string[0]
                 };
@@ -842,6 +1538,7 @@ namespace HardwareSquisher
             breakMinutesInput.Value = Math.Max(breakMinutesInput.Minimum, Math.Min(breakMinutesInput.Maximum, settings.breakTimerMinutes));
             timerMinutesInput.Enabled = timerEnabledCheck.Checked;
             breakMinutesInput.Enabled = timerEnabledCheck.Checked;
+            pauseWithEscapeCheck.Checked = settings.pauseGameWithEscape;
             foldersList.Items.Clear();
             foreach (string folder in settings.gameFolders) foldersList.Items.Add(folder);
         }
@@ -855,6 +1552,7 @@ namespace HardwareSquisher
                 settings.gameTimerEnabled = timerEnabledCheck.Checked;
                 settings.gameTimerMinutes = (int)timerMinutesInput.Value;
                 settings.breakTimerMinutes = (int)breakMinutesInput.Value;
+                settings.pauseGameWithEscape = pauseWithEscapeCheck.Checked;
                 settings.gameFolders = foldersList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
                 string serialized = json.Serialize(settings);
                 File.WriteAllText(settingsPath, PrettyJson(serialized), new UTF8Encoding(false));
@@ -1047,6 +1745,12 @@ namespace HardwareSquisher
                     SetFooter("Restarting the Hardware Squisher watcher...");
                 }
                 bool boosted = File.Exists(statePath) || GetActiveSchemeGuid() == BoostGuid;
+                if (!boostStateKnown || boosted != previousBoostState)
+                {
+                    if (boosted) ResetTemperaturePeaks();
+                    previousBoostState = boosted;
+                    boostStateKnown = true;
+                }
                 string activePlan = GetActiveSchemeName();
                 string game = GetActiveGameFromLog(boosted);
                 int? brightness = GetBrightness();
@@ -1289,6 +1993,8 @@ namespace HardwareSquisher
             exiting = true;
             refreshTimer.Stop();
             countdownTimer.Stop();
+            performanceTimer.Stop();
+            breakUiTimer.Stop();
             panelFlipTimer.Stop();
             trayIcon.Visible = false;
             Close();
@@ -1305,7 +2011,11 @@ namespace HardwareSquisher
             trayIcon.Dispose();
             refreshTimer.Dispose();
             countdownTimer.Dispose();
+            performanceTimer.Dispose();
+            breakUiTimer.Dispose();
             panelFlipTimer.Dispose();
+            if (showBreakEvent != null) showBreakEvent.Dispose();
+            if (hideBreakEvent != null) hideBreakEvent.Dispose();
         }
 
         private void SetFooter(string text)

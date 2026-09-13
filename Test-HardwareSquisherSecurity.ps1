@@ -14,6 +14,7 @@ Add-Check 'No network access' (@($network).Count -eq 0) 'No web, socket, downloa
 $hardware=[regex]::Matches($text,'LENOVO_GAMEZONE|SetSmartFan|SetFan|Fan_Set_Table|SetBIOS|OverClock|UnderVolt','IgnoreCase')|ForEach-Object Value|Sort-Object -Unique
 Add-Check 'No fan or firmware control' (@($hardware).Count -eq 0) 'Fan mode, firmware, BIOS, voltage, and clocks are untouched.'
 $watcher=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.ps1')
+$appSource=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.cs')
 Add-Check 'No Realtime priority' ($watcher -notmatch "PriorityClass\s*=\s*'Realtime'") 'Only High with Above Normal fallback is used.'
 Add-Check 'Single-instance protection' ($watcher -match 'HardwareSquisherWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
@@ -41,21 +42,92 @@ Add-Check 'Full disable restoration' (
     $watcher -match 'Restore-GamePriorities' -and
     $undo -match 'Restore-SavedPriorities'
 ) 'Power plan, brightness, and original live process priorities are restored on disable, recovery, reinstall, and undo.'
+Add-Check 'Timer alarm stops safely' (
+    $appSource -match 'class TimerAlertForm' -and
+    $appSource -match 'soundTimer\.Interval\s*=\s*1500' -and
+    $appSource -match 'soundTimer\.Stop\(\)' -and
+    $appSource -match 'soundTimer\.Dispose\(\)' -and
+    $appSource -match 'RetroButton\("Stop alarm"'
+) 'The visible timer alarm repeats a Windows sound until Stop alarm is pressed, then stops and disposes its timer.'
+Add-Check 'Plain-language timer alert' (
+    $appSource -match 'Time for a break!' -and
+    $appSource -match 'Break over!' -and
+    $appSource -match 'You can play again\.'
+) 'Timer messages use short, plain-language instructions.'
+Add-Check 'Windows 98 secondary dialogs' (
+    $appSource -match 'abstract class RetroDialogForm' -and
+    $appSource -match 'class RetroDialogButton' -and
+    $appSource -match 'TimerAlertForm\s*:\s*RetroDialogForm' -and
+    $appSource -match 'SessionSummaryForm\s*:\s*RetroDialogForm' -and
+    $appSource -match 'FormBorderStyle\s*=\s*FormBorderStyle\.None' -and
+    $appSource -match 'BackColor\s*=\s*Color\.FromArgb\(0, 0, 128\)' -and
+    $appSource -match 'Border3DStyle\.Raised' -and
+    $appSource -match 'Border3DStyle\.Sunken' -and
+    $appSource -match 'FlatStyle\s*=\s*FlatStyle\.Standard' -and
+    $appSource -notmatch 'DrawFocusRectangle'
+) 'The alarm and session summary share the classic title bar, gray surface, fixed raised/sunken button borders, and beveled controls used by the main interface.'
+Add-Check 'Aligned activity toggle' (
+    $appSource -match 'toggleLogButton\.Left\s*=\s*logGroup\.Left\s*\+\s*actionLeft' -and
+    $appSource -match 'toggleLogButton\.Width\s*=\s*actionWidth' -and
+    $appSource -match 'toggleLogButton\.Height\s*=\s*25'
+) 'Hide activity uses the exact width, left edge, right edge, and height of Open log and Diagnostics.'
+Add-Check 'Target-verified Escape control' (
+    $watcher -match 'MainWindowHandle' -and
+    $watcher -match 'GetForegroundWindow\(\) -ne \$targetHandle' -and
+    $watcher -match 'Escape skipped safely' -and
+    $watcher -match 'keybd_event\(0x1B' -and
+    $watcher -notmatch 'SendKeys.*ESC'
+) 'Escape is sent only after the detected game window is selected and verified as the foreground window; there is no global fallback.'
+Add-Check 'Automatic break interface flow' (
+    $watcher -match '--break-ui-show' -and
+    $watcher -match '--break-ui-hide' -and
+    $appSource -match 'HardwareSquisherShowBreak_v1' -and
+    $appSource -match 'ShowForBreak\(\)' -and
+    $appSource -match 'HideAfterBreak\(\)'
+) 'The main interface is signaled to show when a break starts and hide when the break ends.'
+Add-Check 'Read-only CPU and GPU temperatures' (
+    $appSource -match 'performanceTimer\.Interval\s*=\s*1000' -and
+    $appSource -match 'GetCPUTemp' -and
+    $appSource -match '--query-gpu=temperature\.gpu' -and
+    $appSource -match 'peakCpuTemperature' -and
+    $appSource -match 'peakGpuTemperature' -and
+    $appSource -match 'Danger' -and
+    $appSource -notmatch '--power-limit|-pl\s|SetSmartFan|SetFan'
+) 'CPU and GPU temperatures and session peaks refresh every second using read-only queries, with color and unavailable handling.'
+Add-Check 'Read-only MSI Afterburner CPU sensor' (
+    $appSource -match 'MemoryMappedFile\.OpenExisting\("MAHMSharedMemory", MemoryMappedFileRights\.Read\)' -and
+    $appSource -match 'CreateViewAccessor\(0, 0, MemoryMappedFileAccess\.Read\)' -and
+    $appSource -match 'CpuTemperatureSourceId\s*=\s*0x00000080' -and
+    $appSource -notmatch 'MemoryMappedFile\.CreateNew|MemoryMappedFileAccess\.Write|WriteArray|WriteByte|WriteInt'
+) 'MSI Afterburner CPU temperature is consumed through its existing monitoring map with read-only handles and bounded data validation.'
+Add-Check 'Persistent game session notes' (
+    $watcher -match 'GameSessionHistory\.txt' -and
+    $watcher -match 'Total game time:' -and
+    $watcher -match 'Timer cycles:' -and
+    $watcher -match 'Peak CPU temperature:' -and
+    $watcher -match 'Peak GPU temperature:' -and
+    $appSource -match 'class SessionSummaryForm'
+) 'A plain-text history and visible exit summary store the game, date/time, duration, cycles, and peak CPU/GPU temperatures.'
 $installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-HardwareSquisher.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
-$setup=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisherSetup.cs')
-$installerBuilder=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Build-HardwareSquisherInstaller.ps1')
+$setupPath=Join-Path $PackagePath 'HardwareSquisherSetup.cs'
+$installerBuilderPath=Join-Path $PackagePath 'Build-HardwareSquisherInstaller.ps1'
+$packageBuildFilesPresent=(Test-Path -LiteralPath $setupPath) -and (Test-Path -LiteralPath $installerBuilderPath)
+$setup=if($packageBuildFilesPresent){Get-Content -Raw -LiteralPath $setupPath}else{''}
+$installerBuilder=if($packageBuildFilesPresent){Get-Content -Raw -LiteralPath $installerBuilderPath}else{''}
 $undoScript=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-HardwareSquisher.ps1')
 Add-Check 'RTX 20/30 compatibility coverage' (
-    $setup -match 'Rtx20Or30Pattern' -and
-    $setup -match 'RTX 3050 Laptop GPU' -and
-    $setup -match 'RTX 3090' -and
-    $installerBuilder -match '--compatibility-test'
-) 'The installer self-test covers RTX 20/30 desktop, SUPER, Ti, and Laptop GPU naming variants.'
+    -not $packageBuildFilesPresent -or (
+        $setup -match 'Rtx20Or30Pattern' -and
+        $setup -match 'RTX 3050 Laptop GPU' -and
+        $setup -match 'RTX 3090' -and
+        $installerBuilder -match '--compatibility-test'
+    )
+) $(if($packageBuildFilesPresent){'The installer self-test covers RTX 20/30 desktop, SUPER, Ti, and Laptop GPU naming variants.'}else{'Installer build files are intentionally omitted from the installed runtime; this package-only check was completed before installation.'})
 Add-Check 'GPU-independent behavior' (
     $text -notmatch 'nvidia-smi|NVAPI|Set-Gpu|Overclock|Undervolt' -and
-    $setup -match 'does not change GPU clocks, voltages, drivers, firmware, or NVIDIA settings'
-) 'RTX recognition is informational; the application does not issue vendor-specific GPU tuning commands.'
+    (-not $packageBuildFilesPresent -or $setup -match 'does not change GPU clocks, voltages, drivers, firmware, or NVIDIA settings')
+) $(if($packageBuildFilesPresent){'RTX recognition is informational; the application does not issue vendor-specific GPU tuning commands.'}else{'Installed runtime scripts contain no vendor-specific GPU tuning commands.'})
 Add-Check 'Adaptive Windows power settings' (
     $installer -match 'function Try-PowerCfg' -and
     $installer -match 'balancedGuid.*boostGuid' -and

@@ -18,6 +18,7 @@ namespace HardwareSquisherInstaller
         internal static readonly string[] PayloadNames =
         {
             "HardwareSquisher.exe",
+            "HardwareSquisher.cs",
             "HardwareSquisher.ico",
             "HardwareSquisher.ps1",
             "Install-HardwareSquisher.ps1",
@@ -26,6 +27,7 @@ namespace HardwareSquisherInstaller
             "Uninstall-HardwareSquisher.ps1",
             "Test-HardwareSquisherSecurity.ps1",
             "README.txt",
+            "TEMPERATURE-GUIDE.md",
             "settings.json"
         };
 
@@ -471,7 +473,7 @@ namespace HardwareSquisherInstaller
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
                 key.SetValue("DisplayName", "Hardware Squisher");
-                key.SetValue("DisplayVersion", "1.6.0");
+                key.SetValue("DisplayVersion", "1.10.0");
                 key.SetValue("Publisher", "Hardware Squisher");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);

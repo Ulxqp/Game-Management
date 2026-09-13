@@ -4,6 +4,7 @@ $output = Join-Path (Split-Path -Parent $package) 'HardwareSquisher-Setup.exe'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $payloads = @(
     'HardwareSquisher.exe',
+    'HardwareSquisher.cs',
     'HardwareSquisher.ico',
     'HardwareSquisher.ps1',
     'Install-HardwareSquisher.ps1',
@@ -12,6 +13,7 @@ $payloads = @(
     'Uninstall-HardwareSquisher.ps1',
     'Test-HardwareSquisherSecurity.ps1',
     'README.txt',
+    'TEMPERATURE-GUIDE.md',
     'settings.json'
 )
 

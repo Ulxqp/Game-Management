@@ -45,9 +45,36 @@ game/break cycle while the game remains open. The dashboard shows the active
 phase, an exact MM:SS value beside Minutes left, and the current cycle number.
 The timer display is updated independently for smooth display. Confirm applies
 new game and break durations immediately. If the interface is closed, the
-background watcher still tracks the timers, plays the Windows exclamation
-sound, and opens each alert. Closing the final game cancels and resets the
-cycle.
+background watcher still tracks the timers and opens a topmost alarm. The
+Windows alert sound repeats until Stop alarm is pressed. The alert uses short
+messages such as "Time for a break!" and "Break over!" Closing the final game
+cancels and resets the cycle.
+
+The timer alarm and game-session summary use the same Windows 98-style navy
+title bar, gray background, raised border, inset panels, and beveled buttons as
+the main interface. The main interface itself is unchanged.
+
+BREAK CONTROL
+-------------
+The Press Escape option is enabled by default. At break start, Hardware
+Squisher finds the detected game's real window, brings that window forward,
+checks that it truly has focus, and only then presses Escape. The main
+interface appears with the break countdown. At break end, the same safe check
+presses Escape again and the main interface hides to the notification area.
+If Windows cannot focus the game, no key is sent and the reason is logged.
+
+LIVE TEMPERATURES AND SESSION HISTORY
+-------------------------------------
+The Current status panel updates CPU and GPU temperature every second and keeps
+the highest temperature reached during the game session. Green means Safe,
+orange means Warm, and red means Danger. A sensor says Unavailable when Windows
+or the laptop firmware does not expose it safely to a normal-user application.
+If MSI Afterburner is already running, Hardware Squisher reads its CPU
+temperature monitoring value through a read-only shared-memory connection.
+It does not start profiles or change any MSI Afterburner setting.
+When the final game process closes, a simple session summary appears. The game,
+date, start/end time, total game time, timer cycles, and peak CPU/GPU temperatures are
+also appended to GameSessionHistory.txt.
 
 The application can be closed to the notification area. Exiting the interface
 does not stop the background watcher. Use Pause to stop Hardware Squisher.
@@ -61,7 +88,7 @@ SAFETY
 The interface keeps the existing AC-only behavior, High priority fallback,
 brightness restoration, power-plan restoration, recovery state, and exclusions.
 It does not control vendor fan/thermal modes, BIOS settings, GPU drivers,
-voltages, or clocks.
+voltages, clocks, or thermal limits. Temperature checks are read-only.
 
 FILES
 -----
