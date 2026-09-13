@@ -35,8 +35,11 @@ Add-Check 'Single interface instance' (
     $appSource -match 'if \(!createdNew\)' -and
     $appSource -match 'showSignal\.Set\(\)' -and
     $appSource -match 'GameManagementShowMain_v1' -and
+    $appSource -match 'StartUiSignalListener' -and
+    $appSource -match 'WaitHandle\.WaitAny\(signals, 500\)' -and
+    $appSource -match 'uiContext\.Post' -and
     $appSource -match 'ShowFromTray\(\)'
-) 'Only one main interface can run; later launches signal the existing window to show and activate.'
+) 'Only one main interface can run; a background listener reliably shows and activates the hidden window after later launches.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
 Add-Check 'Cached process classification' (
     $watcher -match 'processClassificationCache' -and

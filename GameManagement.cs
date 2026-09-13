@@ -704,7 +704,6 @@ namespace GameManagement
         private readonly Timer refreshTimer = new Timer();
         private readonly Timer countdownTimer = new Timer();
         private readonly Timer performanceTimer = new Timer();
-        private readonly Timer breakUiTimer = new Timer();
         private readonly Timer panelFlipTimer = new Timer();
         private readonly NotifyIcon trayIcon = new NotifyIcon();
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -714,6 +713,9 @@ namespace GameManagement
         private System.Threading.EventWaitHandle showBreakEvent;
         private System.Threading.EventWaitHandle hideBreakEvent;
         private System.Threading.EventWaitHandle showMainEvent;
+        private System.Threading.SynchronizationContext uiContext;
+        private System.Threading.Thread uiSignalThread;
+        private volatile bool stopUiSignalThread;
         private float? peakCpuTemperature;
         private float? peakGpuTemperature;
         private bool managementStateKnown;
@@ -815,9 +817,6 @@ namespace GameManagement
             performanceTimer.Start();
             RefreshTemperatureMetrics();
 
-            breakUiTimer.Interval = 200;
-            breakUiTimer.Tick += delegate { CheckBreakUiSignals(); };
-            breakUiTimer.Start();
         }
 
         private void BuildWindow()
@@ -1170,10 +1169,11 @@ namespace GameManagement
             FormClosing += OnFormClosing;
             Shown += delegate
             {
+                StartUiSignalListener();
                 RefreshStatus();
                 if (enableOnStart && !IsWatcherRunning()) EnableGameManagement(false);
                 if (showForBreakOnStart) ShowForBreak();
-                else if (hideOnStart) HideAfterBreak();
+                else if (hideOnStart) BeginInvoke(new MethodInvoker(HideAfterBreak));
                 if (Visible || File.Exists(statePath)) RefreshTemperatureMetrics();
             };
         }
@@ -1186,11 +1186,40 @@ namespace GameManagement
             hideBreakEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.HideBreakName, out created);
         }
 
-        private void CheckBreakUiSignals()
+        private void StartUiSignalListener()
         {
-            if (showMainEvent != null && showMainEvent.WaitOne(0)) ShowFromTray();
-            if (showBreakEvent != null && showBreakEvent.WaitOne(0)) ShowForBreak();
-            if (hideBreakEvent != null && hideBreakEvent.WaitOne(0)) HideAfterBreak();
+            if (uiSignalThread != null) return;
+            uiContext = System.Threading.SynchronizationContext.Current;
+            if (uiContext == null) uiContext = new WindowsFormsSynchronizationContext();
+
+            uiSignalThread = new System.Threading.Thread(new System.Threading.ThreadStart(delegate
+            {
+                System.Threading.WaitHandle[] signals = { showMainEvent, showBreakEvent, hideBreakEvent };
+                while (!stopUiSignalThread)
+                {
+                    int signalIndex;
+                    try { signalIndex = System.Threading.WaitHandle.WaitAny(signals, 500); }
+                    catch (ObjectDisposedException) { return; }
+                    if (stopUiSignalThread) return;
+                    if (signalIndex == System.Threading.WaitHandle.WaitTimeout) continue;
+
+                    int requestedAction = signalIndex;
+                    try
+                    {
+                        uiContext.Post(delegate
+                        {
+                            if (IsDisposed || stopUiSignalThread) return;
+                            if (requestedAction == 0) ShowFromTray();
+                            else if (requestedAction == 1) ShowForBreak();
+                            else if (requestedAction == 2) HideAfterBreak();
+                        }, null);
+                    }
+                    catch (System.ComponentModel.InvalidAsynchronousStateException) { return; }
+                }
+            }));
+            uiSignalThread.IsBackground = true;
+            uiSignalThread.Name = "Game Management UI signal listener";
+            uiSignalThread.Start();
         }
 
         private void ShowForBreak()
@@ -2063,7 +2092,6 @@ namespace GameManagement
             refreshTimer.Stop();
             countdownTimer.Stop();
             performanceTimer.Stop();
-            breakUiTimer.Stop();
             panelFlipTimer.Stop();
             trayIcon.Visible = false;
             Close();
@@ -2081,8 +2109,10 @@ namespace GameManagement
             refreshTimer.Dispose();
             countdownTimer.Dispose();
             performanceTimer.Dispose();
-            breakUiTimer.Dispose();
             panelFlipTimer.Dispose();
+            stopUiSignalThread = true;
+            if (showMainEvent != null) showMainEvent.Set();
+            if (uiSignalThread != null && uiSignalThread.IsAlive) uiSignalThread.Join(1000);
             if (showMainEvent != null) showMainEvent.Dispose();
             if (showBreakEvent != null) showBreakEvent.Dispose();
             if (hideBreakEvent != null) hideBreakEvent.Dispose();

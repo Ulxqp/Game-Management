@@ -1,6 +1,12 @@
 # Game Management changelog
 
-## 2.0.2 — current
+## 2.0.3 — current
+
+- Fixed repeated EXE launches failing to show an interface that was started hidden in the notification area.
+- Replaced hidden-window timer polling with a dedicated signal listener that safely posts show/hide requests to the Windows UI thread.
+- Kept strict single-instance protection: reopening the EXE shows the existing interface without creating another copy.
+
+## 2.0.2
 
 - Added strict single-instance protection for the main Game Management interface.
 - Opening Game Management again now shows and activates the existing window instead of starting a duplicate.
