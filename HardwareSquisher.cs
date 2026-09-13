@@ -871,7 +871,7 @@ namespace HardwareSquisher
             statusSurface.Controls.Add(flowerPanel);
 
             statusLamp = new Panel();
-            statusLamp.Location = new Point(15, 13);
+            statusLamp.Location = new Point(15, 3);
             statusLamp.Size = new Size(16, 16);
             statusLamp.BorderStyle = BorderStyle.Fixed3D;
             statusFrontPanel.Controls.Add(statusLamp);

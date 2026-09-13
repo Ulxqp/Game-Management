@@ -53,7 +53,7 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v1.12.0 package was verified on September 13, 2026 before publication. The Game Management watcher contains no process-priority controls. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. Secondary-dialog buttons use a fixed classic border so focus cannot add an inconsistent heavy edge. Hide activity aligns with Open log and Diagnostics. MSI Afterburner CPU temperature access is read-only. The timer cycle itself continues in the background.
+The v1.12.1 package was verified on September 14, 2026 before publication. The status indicator stays clear of the Mode row, and the Game Management watcher contains no process-priority controls. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. Secondary-dialog buttons use a fixed classic border so focus cannot add an inconsistent heavy edge. Hide activity aligns with Open log and Diagnostics. MSI Afterburner CPU temperature access is read-only. The timer cycle itself continues in the background.
 
 - AnyCPU application and installer compilation: **PASS**
 - PowerShell safety, sensor-access, portability, and interface-alignment suite: **29/29 checks passed**

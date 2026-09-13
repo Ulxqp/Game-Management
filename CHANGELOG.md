@@ -1,6 +1,11 @@
 # Hardware Squisher changelog
 
-## 1.12.0 — current
+## 1.12.1 — current
+
+- Moved the status indicator upward so it no longer overlaps the Mode row.
+- Kept the existing Windows 98 layout and all Game Management behavior unchanged.
+
+## 1.12.0
 
 - Changed the application's core description from game performance control to **Game Management**.
 - Removed automatic High and Above Normal process-priority changes from the watcher.
