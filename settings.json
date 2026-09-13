@@ -1,0 +1,15 @@
+{
+  "pollSeconds": 3,
+  "gameBrightnessPercent": 75,
+  "gameTimerEnabled": true,
+  "gameTimerMinutes": 30,
+  "breakTimerMinutes": 5,
+  "gameFolders": [
+    "C:\\Program Files (x86)\\Steam\\steamapps\\common"
+  ],
+  "excludedProcesses": [
+    "steam", "steamwebhelper", "GameOverlayUI", "crashreporter", "dowser",
+    "UnityCrashHandler64", "UnityCrashHandler32", "unins000", "setup",
+    "launcher", "ModPostProcessor", "ModPublisher", "vswhere"
+  ]
+}

@@ -1,0 +1,14 @@
+*.log
+runtime-state.json
+timer-state.json
+install-backup.json
+engine-enabled.flag
+Legacy/
+*.setup-new
+/SECURITY-REPORT.md
+/LIVE-TEST-REPORT.md
+/SYSTEM-POWER-AUDIT.md
+/*-preview.png
+/HardwareSquisher.exe
+bin/
+obj/
