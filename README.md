@@ -2,6 +2,8 @@
 
 Hardware Squisher is a Windows desktop utility with a deliberately retro Windows 98 interface. It detects games in configured library folders, applies a dedicated AC-only performance plan, raises game process priority safely, controls supported built-in display brightness, and restores the previous system state when the game closes.
 
+> **Notice:** This code was created entirely by AI. The application is intended for personal use only.
+
 ![Hardware Squisher interface](docs/HardwareSquisher-preview.png)
 
 ## Features
@@ -54,4 +56,3 @@ This compiles the application, runs the safety checks, and creates the single-fi
 - `HardwareSquisherSetup.cs` — single-file graphical installer
 
 See [CHANGELOG.md](CHANGELOG.md) for update history.
-
