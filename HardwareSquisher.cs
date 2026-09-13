@@ -446,6 +446,18 @@ namespace HardwareSquisher
         public string[] excludedProcesses { get; set; }
     }
 
+    internal sealed class PriorityRuntimeState
+    {
+        public PrioritySnapshot[] OriginalPriorities { get; set; }
+    }
+
+    internal sealed class PrioritySnapshot
+    {
+        public int ProcessId { get; set; }
+        public string ProcessName { get; set; }
+        public string PriorityClass { get; set; }
+    }
+
     internal sealed class GameSessionSummary
     {
         public string Game { get; set; }
@@ -666,6 +678,7 @@ namespace HardwareSquisher
         private readonly string timerStatePath;
         private readonly string performanceStatePath;
         private readonly string engineEnabledPath;
+        private readonly string priorityDisabledPath;
         private readonly string watcherPath;
         private readonly string installerPath;
         private readonly string pausePath;
@@ -720,6 +733,7 @@ namespace HardwareSquisher
         private GroupBox logGroup;
         private Button enableButton;
         private Button pauseButton;
+        private Button priorityButton;
         private Button toggleLogButton;
         private Label footerLabel;
         private bool activityVisible = true;
@@ -756,6 +770,7 @@ namespace HardwareSquisher
             timerStatePath = Path.Combine(rootPath, "timer-state.json");
             performanceStatePath = Path.Combine(rootPath, "performance-state.json");
             engineEnabledPath = Path.Combine(rootPath, "engine-enabled.flag");
+            priorityDisabledPath = Path.Combine(rootPath, "priority-disabled.flag");
             watcherPath = Path.Combine(rootPath, "HardwareSquisher.ps1");
             installerPath = Path.Combine(rootPath, "Install-HardwareSquisher.ps1");
             pausePath = Path.Combine(rootPath, "Pause-HardwareSquisher.ps1");
@@ -918,6 +933,11 @@ namespace HardwareSquisher
             refreshButton.Location = new Point(622, 93);
             refreshButton.Click += delegate { RefreshStatus(); };
             body.Controls.Add(refreshButton);
+
+            priorityButton = RetroButton("Stop priority", 88, 26);
+            priorityButton.Location = new Point(696, 93);
+            priorityButton.Click += delegate { ToggleHighPriority(); };
+            body.Controls.Add(priorityButton);
 
             GroupBox settingsGroup = RetroGroup("Settings", 414, 132, 370, 184);
             body.Controls.Add(settingsGroup);
@@ -1083,14 +1103,16 @@ namespace HardwareSquisher
                 settingsGroup.Left = rightSectionLeft;
                 settingsGroup.Width = rightSectionWidth;
 
-                int topButtonGap = 10;
-                int topButtonWidth = Math.Max(72, (rightSectionWidth - (topButtonGap * 2)) / 3);
+                int topButtonGap = 8;
+                int topButtonWidth = Math.Max(78, (rightSectionWidth - (topButtonGap * 3)) / 4);
                 enableButton.Left = rightSectionLeft;
                 enableButton.Width = topButtonWidth;
                 pauseButton.Left = enableButton.Right + topButtonGap;
                 pauseButton.Width = topButtonWidth;
                 refreshButton.Left = pauseButton.Right + topButtonGap;
-                refreshButton.Width = rightSectionLeft + rightSectionWidth - refreshButton.Left;
+                refreshButton.Width = topButtonWidth;
+                priorityButton.Left = refreshButton.Right + topButtonGap;
+                priorityButton.Width = rightSectionLeft + rightSectionWidth - priorityButton.Left;
 
                 foldersGroup.Width = contentWidth;
                 logGroup.Width = contentWidth;
@@ -1765,6 +1787,7 @@ namespace HardwareSquisher
                 watcherValue.Text = watcher ? "Running" : "Stopped";
                 enableButton.Enabled = !watcher;
                 pauseButton.Enabled = watcher || boosted;
+                priorityButton.Text = File.Exists(priorityDisabledPath) ? "Start priority" : "Stop priority";
                 startupCheck.Checked = startup;
                 trayIcon.Text = watcher && !boosted ? "Hardware Squisher" : (boosted ? "Hardware Squisher — ACTIVE" : "Hardware Squisher — paused");
                 ReadRecentLog();
@@ -1970,6 +1993,62 @@ namespace HardwareSquisher
             if (!File.Exists(report)) report = Path.Combine(rootPath, "SECURITY-REPORT.md");
             if (!File.Exists(report)) { RetroMessage("No diagnostic report was found.", "Hardware Squisher"); return; }
             Process.Start(new ProcessStartInfo(report) { UseShellExecute = true });
+        }
+
+        private void ToggleHighPriority()
+        {
+            try
+            {
+                if (File.Exists(priorityDisabledPath))
+                {
+                    File.Delete(priorityDisabledPath);
+                    priorityButton.Text = "Stop priority";
+                    SetFooter("High priority is enabled and will resume on the next scan.");
+                }
+                else
+                {
+                    File.WriteAllText(priorityDisabledPath, "disabled", new UTF8Encoding(false));
+                    int restored = RestoreCapturedPriorities();
+                    priorityButton.Text = "Start priority";
+                    SetFooter(restored > 0
+                        ? "High priority stopped; the game priority was restored."
+                        : "High priority stopped for this and future games.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError("The priority setting could not be changed.\r\n\r\n" + ex.Message);
+            }
+            RefreshStatus();
+        }
+
+        private int RestoreCapturedPriorities()
+        {
+            if (!File.Exists(statePath)) return 0;
+            PriorityRuntimeState state;
+            try { state = json.Deserialize<PriorityRuntimeState>(File.ReadAllText(statePath)); }
+            catch { return 0; }
+            if (state == null || state.OriginalPriorities == null) return 0;
+
+            int restored = 0;
+            foreach (PrioritySnapshot saved in state.OriginalPriorities)
+            {
+                if (saved == null || saved.ProcessId <= 0 || string.IsNullOrWhiteSpace(saved.ProcessName)) continue;
+                ProcessPriorityClass priority;
+                if (!Enum.TryParse(saved.PriorityClass, true, out priority) ||
+                    priority == ProcessPriorityClass.RealTime) continue;
+                try
+                {
+                    using (Process process = Process.GetProcessById(saved.ProcessId))
+                    {
+                        if (!string.Equals(process.ProcessName, saved.ProcessName, StringComparison.OrdinalIgnoreCase)) continue;
+                        process.PriorityClass = priority;
+                        restored++;
+                    }
+                }
+                catch { }
+            }
+            return restored;
         }
 
         private void HideToTray()

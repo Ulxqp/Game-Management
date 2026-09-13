@@ -3,6 +3,7 @@ runtime-state.json
 timer-state.json
 install-backup.json
 engine-enabled.flag
+priority-disabled.flag
 Legacy/
 *.setup-new
 /SECURITY-REPORT.md

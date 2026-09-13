@@ -100,6 +100,20 @@ Add-Check 'Read-only MSI Afterburner CPU sensor' (
     $appSource -match 'CpuTemperatureSourceId\s*=\s*0x00000080' -and
     $appSource -notmatch 'MemoryMappedFile\.CreateNew|MemoryMappedFileAccess\.Write|WriteArray|WriteByte|WriteInt'
 ) 'MSI Afterburner CPU temperature is consumed through its existing monitoring map with read-only handles and bounded data validation.'
+Add-Check 'Independent priority stop control' (
+    $appSource -match 'priority-disabled\.flag' -and
+    $appSource -match 'RestoreCapturedPriorities' -and
+    $appSource -match 'ProcessPriorityClass\.RealTime' -and
+    $appSource -match '"Stop priority"' -and
+    $appSource -match '"Start priority"' -and
+    $watcher -match 'Update-GamePriorityMode' -and
+    $watcher -match 'High process priority stopped; original game priority restored' -and
+    $watcher -match 'Test-Path -LiteralPath \$priorityDisabledPath'
+) 'Stop priority restores the captured game priority and prevents reapplication while all other boost features continue.'
+Add-Check 'Exited game cleanup' (
+    $watcher -match 'if \(\$process\.HasExited\) \{ continue \}' -and
+    $watcher -match "'crash_reporter','crashreporter'"
+) 'Exited process entries and known crash reporters are ignored so boost can restore after the real game closes.'
 Add-Check 'Persistent game session notes' (
     $watcher -match 'GameSessionHistory\.txt' -and
     $watcher -match 'Total game time:' -and

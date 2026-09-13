@@ -1,6 +1,15 @@
 # Hardware Squisher changelog
 
-## 1.10.0 — current
+## 1.11.0 — current
+
+- Added a Windows 98-style **Stop priority** button beside Refresh.
+- Stop priority immediately restores the detected game's original process priority while keeping the power plan, brightness, timer, game detection, and temperature monitoring active.
+- A persistent safety switch prevents the watcher from silently setting High priority again.
+- The button changes to **Start priority**, which resumes automatic High priority on the next watcher scan.
+- Removed the unfinished Hide overlay / Show overlay button and its RTSS control code.
+- Exited game-process entries and SnowRunner's crash reporter are ignored so they cannot keep boost or High priority active after the game closes.
+
+## 1.10.0
 
 - Added a read-only MSI Afterburner CPU-temperature source for systems whose Lenovo/Windows sensor interface is unavailable.
 - Reads only the official `MAHMSharedMemory` monitoring entry for CPU temperature; it cannot apply profiles or change clocks, voltage, power limits, fans, or thermal controls.

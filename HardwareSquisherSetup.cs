@@ -473,7 +473,7 @@ namespace HardwareSquisherInstaller
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
                 key.SetValue("DisplayName", "Hardware Squisher");
-                key.SetValue("DisplayVersion", "1.10.0");
+                key.SetValue("DisplayVersion", "1.11.0");
                 key.SetValue("Publisher", "Hardware Squisher");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);
