@@ -1,6 +1,17 @@
 # Hardware Squisher changelog
 
-## 1.5.0 — current
+## 1.6.0 — current
+
+- Added informational detection for NVIDIA GeForce RTX 20- and 30-series desktop, Ti, SUPER, and Laptop GPU names.
+- Added a non-mutating compatibility self-test to the installer build.
+- Made the AnyCPU installer adapt to optional power settings omitted by vendor firmware.
+- Added a Balanced-plan fallback when the standard High Performance template is unavailable.
+- Removed hardcoded watcher cleanup paths so redirected and localized Documents folders work correctly.
+- Added a per-install `HARDWARE-COMPATIBILITY.txt` report containing detected display adapters and applied power capabilities.
+- Confirmed GPU clocks, voltages, drivers, firmware, and NVIDIA settings remain untouched.
+- Updated the packaged installer in `dist` automatically after every verified build.
+
+## 1.5.0
 
 - Added a user-selectable 1-240 minute game timer, enabled at 30 minutes by default.
 - Starts the countdown when the first game launches and resets it when the final game closes.

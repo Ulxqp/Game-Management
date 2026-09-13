@@ -24,6 +24,7 @@ $arguments = @(
     ('/win32icon:' + (Join-Path $package 'HardwareSquisher.ico')),
     '/reference:System.dll', '/reference:System.Core.dll',
     '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+    '/reference:System.Management.dll',
     ('/out:' + $output)
 )
 foreach ($name in $payloads) {
@@ -39,5 +40,11 @@ if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed with exit code $L
 $verification = Start-Process -FilePath $output -ArgumentList '--verify' -Wait -PassThru
 if ($verification.ExitCode -ne 0) { throw 'The completed installer failed payload verification.' }
 
-Write-Host "Created and verified: $output" -ForegroundColor Green
+$compatibilityTest = Start-Process -FilePath $output -ArgumentList '--compatibility-test' -Wait -PassThru
+if ($compatibilityTest.ExitCode -ne 0) { throw 'The completed installer failed RTX 20/30 compatibility classification tests.' }
 
+$distDirectory = Join-Path $package 'dist'
+New-Item -ItemType Directory -Path $distDirectory -Force | Out-Null
+Copy-Item -LiteralPath $output -Destination (Join-Path $distDirectory 'HardwareSquisher-Setup.exe') -Force
+
+Write-Host "Created and verified universal installer: $output" -ForegroundColor Green
