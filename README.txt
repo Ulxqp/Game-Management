@@ -1,8 +1,8 @@
 HARDWARE SQUISHER
 =================
 
-Hardware Squisher is a Windows desktop and notification-area controller for
-the existing performance-mode data folder in Documents\GameBoost.
+Hardware Squisher is a Windows desktop and notification-area Game Management
+controller. Its data remains in Documents\GameBoost for upgrade compatibility.
 
 RUN
 ---
@@ -35,12 +35,7 @@ Pause          Stops the watcher, restores captured system settings, and
                disables sign-in startup without deleting the power plan.
 Save settings  Saves brightness, scan interval, and game-library folders.
 Add            Adds a launcher or standalone game-library folder.
-Stop priority  Restores the game's original process priority while every other
-               Hardware Squisher feature keeps running.
-Start priority Lets Hardware Squisher use High priority again.
-
-The stopped state is remembered, so the watcher will not silently turn High
-priority back on during the next scan or for a newly opened game.
+Hardware Squisher does not change game process priority.
 
 GAME TIMER
 ----------
@@ -91,11 +86,11 @@ gerberas. Use Status to flip back. The animation does not affect monitoring.
 
 SAFETY
 ------
-The interface keeps the existing AC-only behavior, High priority fallback,
-brightness restoration, power-plan restoration, recovery state, and exclusions.
+The interface keeps the existing AC-only behavior, brightness restoration,
+power-plan restoration, recovery state, and exclusions.
 It does not control vendor fan/thermal modes, BIOS settings, GPU drivers,
-voltages, clocks, or thermal limits. Temperature checks are read-only. Stop
-priority changes process priority only and leaves all other features running.
+voltages, clocks, thermal limits, or game process priority. Temperature checks
+are read-only.
 
 FILES
 -----

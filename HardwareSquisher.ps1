@@ -6,7 +6,6 @@ if (-not $ConfigPath) { $ConfigPath = Join-Path $root 'settings.json' }
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
 $performanceStatePath = Join-Path $root 'performance-state.json'
-$priorityDisabledPath = Join-Path $root 'priority-disabled.flag'
 $lastSessionPath = Join-Path $root 'last-session.json'
 $sessionHistoryPath = Join-Path $root 'GameSessionHistory.txt'
 $logPath = Join-Path $root 'HardwareSquisher.log'
@@ -15,8 +14,6 @@ $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
 $active = $false
 $originalGuid = $null
 $originalBrightness = $null
-$originalPriorities = @{}
-$prioritySuspended = $false
 $lastIdleBrightness = $null
 $gameBrightnessPercent = 75
 $gameTimerEnabled = $true
@@ -234,15 +231,9 @@ function Set-DisplayBrightness([int]$percent) {
 }
 
 function Save-State {
-    $priorities = @(
-        foreach ($entry in $script:originalPriorities.Values) {
-            @{ ProcessId = $entry.ProcessId; ProcessName = $entry.ProcessName; PriorityClass = $entry.PriorityClass }
-        }
-    )
     @{
         OriginalPowerScheme = $script:originalGuid
         OriginalBrightness = $script:originalBrightness
-        OriginalPriorities = $priorities
         BoostStarted = (Get-Date).ToString('o')
     } |
         ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
@@ -360,66 +351,6 @@ function Find-RunningGames($folders, $excluded) {
     return @($matches)
 }
 
-function Ensure-GamePriority($gameProcesses) {
-    foreach ($process in $gameProcesses) {
-        try {
-            $priorityKey = [string]$process.Id
-            if (-not $script:originalPriorities.ContainsKey($priorityKey)) {
-                $script:originalPriorities[$priorityKey] = [pscustomobject]@{
-                    ProcessId = [int]$process.Id
-                    ProcessName = [string]$process.ProcessName
-                    PriorityClass = [string]$process.PriorityClass
-                }
-                Save-State
-            }
-            if ($process.PriorityClass -ne 'High') {
-                $process.PriorityClass = 'High'
-                $verified = Get-Process -Id $process.Id -ErrorAction Stop
-                if ($verified.PriorityClass -ne 'High') { throw 'High priority did not remain applied' }
-                Write-Log "High priority applied to $($process.ProcessName) (PID $($process.Id))"
-            }
-        } catch {
-            try {
-                $fallback = Get-Process -Id $process.Id -ErrorAction Stop
-                if ($fallback.PriorityClass -notin @('High','AboveNormal')) {
-                    $fallback.PriorityClass = 'AboveNormal'
-                    Write-Log "Above Normal priority fallback applied to $($fallback.ProcessName) (PID $($fallback.Id))"
-                }
-            } catch {}
-        }
-    }
-}
-
-function Restore-GamePriorities($savedPriorities) {
-    $allowed = @('Idle','BelowNormal','Normal','AboveNormal','High')
-    foreach ($saved in @($savedPriorities)) {
-        try {
-            if ([string]$saved.PriorityClass -notin $allowed) { continue }
-            $process = Get-Process -Id ([int]$saved.ProcessId) -ErrorAction Stop
-            if ($process.ProcessName -ne [string]$saved.ProcessName) { continue }
-            $process.PriorityClass = [string]$saved.PriorityClass
-            Write-Log "Priority restored to $($saved.PriorityClass) for $($process.ProcessName) (PID $($process.Id))"
-        } catch {}
-    }
-}
-
-function Update-GamePriorityMode($gameProcesses) {
-    $disabled = Test-Path -LiteralPath $priorityDisabledPath
-    if ($disabled) {
-        if (-not $script:prioritySuspended) {
-            Restore-GamePriorities @($script:originalPriorities.Values)
-            $script:prioritySuspended = $true
-            Write-Log 'High process priority stopped; original game priority restored'
-        }
-        return
-    }
-    if ($script:prioritySuspended) {
-        $script:prioritySuspended = $false
-        Write-Log 'High process priority resumed'
-    }
-    Ensure-GamePriority $gameProcesses
-}
-
 function Start-Boost($gameProcesses) {
     $script:sessionStartedAt = Get-Date
     $script:sessionGameNames = @($gameProcesses.ProcessName | Sort-Object -Unique)
@@ -429,7 +360,6 @@ function Start-Boost($gameProcesses) {
     if (-not $script:originalGuid) { $script:originalGuid = $balancedGuid }
     $script:originalBrightness = $script:lastIdleBrightness
     if ($null -eq $script:originalBrightness) { $script:originalBrightness = Get-DisplayBrightness }
-    $script:originalPriorities = @{}
     Save-State
     if (-not (Set-Scheme $boostGuid)) {
         Write-Log 'Boost could not activate because the dedicated power plan was unavailable'
@@ -445,7 +375,6 @@ function Start-Boost($gameProcesses) {
     } else {
         Write-Log 'Brightness control is unavailable for the active display'
     }
-    Update-GamePriorityMode $gameProcesses
     $script:active = $true
     Start-GameTimer
     Write-Log "Hardware Squisher ON; previous plan $script:originalGuid; games: $($gameProcesses.ProcessName -join ', ')"
@@ -471,11 +400,6 @@ function Stop-Boost([bool]$showSessionSummary = $false) {
         if (Set-DisplayBrightness $restoreBrightness) { Write-Log "Brightness restored to $restoreBrightness%" }
         else { Write-Log "Brightness restoration to $restoreBrightness% failed" }
     }
-    $restorePriorities = @($script:originalPriorities.Values)
-    if ($restorePriorities.Count -eq 0 -and $savedState) {
-        $restorePriorities = @($savedState.OriginalPriorities)
-    }
-    Restore-GamePriorities $restorePriorities
     if ($showSessionSummary) { Write-GameSessionSummary }
     if ($script:timerPhase -eq 'Break') { Set-BreakInterface $false }
     Clear-State
@@ -483,8 +407,6 @@ function Stop-Boost([bool]$showSessionSummary = $false) {
     $script:active = $false
     $script:originalGuid = $null
     $script:originalBrightness = $null
-    $script:originalPriorities = @{}
-    $script:prioritySuspended = $false
     $script:sessionStartedAt = $null
     $script:sessionGameNames = @()
     $script:lastIdleBrightness = Get-DisplayBrightness
@@ -503,7 +425,6 @@ try {
         if ($null -ne $stale.OriginalBrightness -and (Set-DisplayBrightness ([int]$stale.OriginalBrightness))) {
             Write-Log "Recovered previous brightness $($stale.OriginalBrightness)% after an interrupted run"
         }
-        Restore-GamePriorities @($stale.OriginalPriorities)
         Clear-State
     }
     Clear-GameTimer
@@ -544,7 +465,6 @@ try {
             if (-not $active) { Start-Boost $running }
             elseif ((Get-ActiveScheme) -ne $boostGuid) { Set-Scheme $boostGuid | Out-Null }
             if ($active) {
-                Update-GamePriorityMode $running
                 Update-GameTimer $running
             }
         } else {

@@ -1,6 +1,6 @@
 # Hardware Squisher
 
-Hardware Squisher is a Windows desktop utility with a deliberately retro Windows 98 interface. It detects games in configured library folders, applies a dedicated AC-only performance plan, raises game process priority safely, controls supported built-in display brightness, and restores the previous system state when the game closes.
+Hardware Squisher is a Windows desktop Game Management utility with a deliberately retro Windows 98 interface. It detects games in configured library folders, applies a dedicated AC-only performance plan, controls supported built-in display brightness, manages game/break timers, and restores the previous system state when the game closes. It does not change game process priority.
 
 > **Notice:** This code was created entirely by AI. The application is intended for personal use only.
 
@@ -11,7 +11,7 @@ Hardware Squisher is a Windows desktop utility with a deliberately retro Windows
 - Automatic game detection across configured folders and Steam libraries
 - AC-power-only activation
 - Dedicated Windows power plan with exact plan restoration
-- High process priority with Above Normal fallback; Realtime is never used
+- No game process-priority changes
 - Configurable gaming brightness with restoration
 - Repeating game and break timers with a visible, repeating alarm and cycle counting
 - Consistent Windows 98 styling across the main window, timer alarm, session summary, and installer
@@ -19,7 +19,6 @@ Hardware Squisher is a Windows desktop utility with a deliberately retro Windows
 - Automatic dashboard show during breaks and hide when play resumes
 - Live CPU/GPU temperatures, color conditions, and per-session temperature peaks
 - Read-only CPU-temperature integration with an already-running MSI Afterburner
-- One-click Stop priority / Start priority control that does not interrupt other features
 - A saved session history with game, date/time, duration, cycles, and CPU/GPU peaks
 - Taskbar and notification-area controls
 - Collapsible activity log
@@ -40,7 +39,7 @@ The installer places the application in `Documents\GameBoost`, creates Desktop a
 
 ## Safety
 
-Hardware Squisher does not control fan firmware, BIOS settings, voltages, thermal modes, thermal limits, or CPU/GPU clocks. Its temperature monitor is read-only. On this Lenovo, CPU temperature can be read from MSI Afterburner's monitoring data while MSI Afterburner is running; otherwise Lenovo/Windows fallbacks are tried and Unavailable is shown. Stop priority restores the original game-process priority without disabling the other features, and the watcher respects that choice until Start priority is pressed. Hardware Squisher only activates on AC power. Pausing or uninstalling restores the captured power plan, brightness, and process priorities.
+Hardware Squisher does not control process priority, fan firmware, BIOS settings, voltages, thermal modes, thermal limits, or CPU/GPU clocks. Its temperature monitor is read-only. On this Lenovo, CPU temperature can be read from MSI Afterburner's monitoring data while MSI Afterburner is running; otherwise Lenovo/Windows fallbacks are tried and Unavailable is shown. Hardware Squisher only activates on AC power. Pausing or uninstalling restores the captured power plan and brightness. Setup also restores a legacy priority snapshot if an older version left one behind during an interrupted session.
 
 ## Build from source
 
@@ -54,7 +53,7 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v1.11.0 package was verified on September 13, 2026 before publication. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. Secondary-dialog buttons use a fixed classic border so focus cannot add an inconsistent heavy edge. Hide activity aligns with Open log and Diagnostics. MSI Afterburner CPU temperature access is read-only. Stop priority restores the captured process priority and prevents automatic reapplication until Start priority is pressed. The timer cycle itself continues in the background.
+The v1.12.0 package was verified on September 13, 2026 before publication. The Game Management watcher contains no process-priority controls. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. Secondary-dialog buttons use a fixed classic border so focus cannot add an inconsistent heavy edge. Hide activity aligns with Open log and Diagnostics. MSI Afterburner CPU temperature access is read-only. The timer cycle itself continues in the background.
 
 - AnyCPU application and installer compilation: **PASS**
 - PowerShell safety, sensor-access, portability, and interface-alignment suite: **29/29 checks passed**

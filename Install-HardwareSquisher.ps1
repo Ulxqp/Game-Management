@@ -71,6 +71,7 @@ foreach ($runningWatcher in $watchers) { Stop-Process -Id $runningWatcher.Proces
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
 $engineEnabledPath = Join-Path $root 'engine-enabled.flag'
+$legacyPriorityFlagPath = Join-Path $root 'priority-disabled.flag'
 $runtimeState = $null
 if (Test-Path -LiteralPath $statePath) {
     $runtimeState = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
@@ -91,6 +92,7 @@ if ($runtimeState -and $null -ne $runtimeState.OriginalBrightness) {
     }
 }
 if ($runtimeState) { Restore-SavedPriorities @($runtimeState.OriginalPriorities) }
+Remove-Item -LiteralPath $legacyPriorityFlagPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
 

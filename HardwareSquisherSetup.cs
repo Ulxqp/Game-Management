@@ -226,7 +226,7 @@ namespace HardwareSquisherInstaller
             Controls.Add(heading);
 
             Label subheading = new Label();
-            subheading.Text = "Windows 98-style game-performance and break controller";
+            subheading.Text = "Windows 98-style Game Management and break controller";
             subheading.AutoSize = true;
             subheading.Location = new Point(31, 88);
             Controls.Add(subheading);
@@ -390,7 +390,7 @@ namespace HardwareSquisherInstaller
             }
             HardwareCompatibility.WriteReport(installRoot, hardware);
 
-            SetProgress(55, "Configuring safe performance mode...");
+            SetProgress(55, "Configuring Game Management power mode...");
             RunInstallerScript(Path.Combine(installRoot, "Install-HardwareSquisher.ps1"));
 
             SetProgress(78, "Creating shortcuts...");
@@ -473,7 +473,7 @@ namespace HardwareSquisherInstaller
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
                 key.SetValue("DisplayName", "Hardware Squisher");
-                key.SetValue("DisplayVersion", "1.11.0");
+                key.SetValue("DisplayVersion", "1.12.0");
                 key.SetValue("Publisher", "Hardware Squisher");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);

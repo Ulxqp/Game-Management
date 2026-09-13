@@ -1,6 +1,14 @@
 # Hardware Squisher changelog
 
-## 1.11.0 — current
+## 1.12.0 — current
+
+- Changed the application's core description from game performance control to **Game Management**.
+- Removed automatic High and Above Normal process-priority changes from the watcher.
+- Removed the Stop priority / Start priority button and the priority-disabled runtime switch.
+- Kept AC-only power-plan performance, brightness control and restoration, game/break timers, targeted Escape, game detection, temperatures, session history, and crash cleanup.
+- Setup safely restores any legacy priority snapshot left by an older version, but the new application never raises a game process priority.
+
+## 1.11.0
 
 - Added a Windows 98-style **Stop priority** button beside Refresh.
 - Stop priority immediately restores the detected game's original process priority while keeping the power plan, brightness, timer, game detection, and temperature monitoring active.

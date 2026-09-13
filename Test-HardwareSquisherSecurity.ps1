@@ -15,7 +15,9 @@ $hardware=[regex]::Matches($text,'LENOVO_GAMEZONE|SetSmartFan|SetFan|Fan_Set_Tab
 Add-Check 'No fan or firmware control' (@($hardware).Count -eq 0) 'Fan mode, firmware, BIOS, voltage, and clocks are untouched.'
 $watcher=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.ps1')
 $appSource=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.cs')
-Add-Check 'No Realtime priority' ($watcher -notmatch "PriorityClass\s*=\s*'Realtime'") 'Only High with Above Normal fallback is used.'
+Add-Check 'No game process priority changes' (
+    $watcher -notmatch 'PriorityClass|Ensure-GamePriority|Update-GamePriorityMode|priority-disabled\.flag'
+) 'The Game Management watcher never raises, lowers, or repeatedly resets a game process priority.'
 Add-Check 'Single-instance protection' ($watcher -match 'HardwareSquisherWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
 Add-Check 'Exact restoration' ($watcher -match 'OriginalPowerScheme' -and $watcher -match 'Stop-Boost') 'The pre-game plan is captured and restored.'
@@ -38,10 +40,11 @@ Add-Check 'AC-only activation guard' (
     $watcher -match 'AC power disconnected; disabling Hardware Squisher'
 ) 'Hardware Squisher cannot activate on battery and disables itself when AC is disconnected.'
 Add-Check 'Full disable restoration' (
-    $watcher -match 'OriginalPriorities' -and
-    $watcher -match 'Restore-GamePriorities' -and
-    $undo -match 'Restore-SavedPriorities'
-) 'Power plan, brightness, and original live process priorities are restored on disable, recovery, reinstall, and undo.'
+    $watcher -match 'OriginalPowerScheme' -and
+    $watcher -match 'OriginalBrightness' -and
+    $watcher -match 'Set-Scheme \$restoreGuid' -and
+    $watcher -match 'Set-DisplayBrightness \$restoreBrightness'
+) 'Power plan and brightness are captured and restored on normal disable and recovery.'
 Add-Check 'Timer alarm stops safely' (
     $appSource -match 'class TimerAlertForm' -and
     $appSource -match 'soundTimer\.Interval\s*=\s*1500' -and
@@ -100,16 +103,10 @@ Add-Check 'Read-only MSI Afterburner CPU sensor' (
     $appSource -match 'CpuTemperatureSourceId\s*=\s*0x00000080' -and
     $appSource -notmatch 'MemoryMappedFile\.CreateNew|MemoryMappedFileAccess\.Write|WriteArray|WriteByte|WriteInt'
 ) 'MSI Afterburner CPU temperature is consumed through its existing monitoring map with read-only handles and bounded data validation.'
-Add-Check 'Independent priority stop control' (
-    $appSource -match 'priority-disabled\.flag' -and
-    $appSource -match 'RestoreCapturedPriorities' -and
-    $appSource -match 'ProcessPriorityClass\.RealTime' -and
-    $appSource -match '"Stop priority"' -and
-    $appSource -match '"Start priority"' -and
-    $watcher -match 'Update-GamePriorityMode' -and
-    $watcher -match 'High process priority stopped; original game priority restored' -and
-    $watcher -match 'Test-Path -LiteralPath \$priorityDisabledPath'
-) 'Stop priority restores the captured game priority and prevents reapplication while all other boost features continue.'
+Add-Check 'Priority controls removed from interface' (
+    $appSource -notmatch 'Stop priority|Start priority|RestoreCapturedPriorities|ProcessPriorityClass|priority-disabled\.flag' -and
+    $watcher -notmatch 'High priority|Above Normal priority|PriorityClass'
+) 'The Game Management interface and watcher contain no process-priority feature.'
 Add-Check 'Exited game cleanup' (
     $watcher -match 'if \(\$process\.HasExited\) \{ continue \}' -and
     $watcher -match "'crash_reporter','crashreporter'"
