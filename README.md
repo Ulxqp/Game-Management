@@ -45,6 +45,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Build-HardwareSquisher
 
 This compiles the AnyCPU application, runs the safety and RTX compatibility tests, and creates the single-file installer both one directory above the source folder and in `dist`.
 
+## Verification
+
+The v1.6.0 package was verified on September 13, 2026 before publication:
+
+- AnyCPU application and installer compilation: **PASS**
+- PowerShell safety and portability suite: **18/18 checks passed**
+- Embedded installer payload verification: **PASS** (exit code 0)
+- RTX 20/30 compatibility classifier: **PASS** (exit code 0)
+- Non-installing setup-window render smoke test: **PASS** (exit code 0)
+- Root and `dist` installer copies: **identical**
+- Installer SHA-256: `B25360E1F621D28330956E1F942C6BA3B1B226F11C0484EE51FA7C0B27F30E54`
+
+The classifier test covers representative RTX 2060, 2070 SUPER, 2080 Ti, 3050 Laptop, 3060 Ti, 3070, 3080 Laptop, and 3090 names. This verifies detection and hardware-independent setup behavior; it is not a claim that the application was physically tested on every GPU model or PC configuration.
+
 ## Screenshots
 
 ![Animated pixel gerberas](docs/HardwareSquisher-flowers-preview.png)
