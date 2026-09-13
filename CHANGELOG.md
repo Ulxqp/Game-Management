@@ -1,6 +1,12 @@
 # Game Management changelog
 
-## 2.0.1 — current
+## 2.0.2 — current
+
+- Added strict single-instance protection for the main Game Management interface.
+- Opening Game Management again now shows and activates the existing window instead of starting a duplicate.
+- Kept timer-alert, session-summary, and preview windows independent so their intended dialogs still work.
+
+## 2.0.1
 
 - Disabled the timer **Confirm** button when the displayed timer settings already match the saved settings.
 - Made **Confirm** enable immediately when the game timer, break timer, or timer on/off setting changes.

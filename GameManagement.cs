@@ -23,7 +23,7 @@ namespace GameManagement
             if (args.Length >= 1 && string.Equals(args[0], "--break-ui-show", StringComparison.OrdinalIgnoreCase))
             {
                 if (!UiSignals.TrySignal(UiSignals.ShowBreakName))
-                    Application.Run(new MainForm(false, true));
+                    RunMainFormSingleInstance(false, true, false);
                 return;
             }
             if (args.Length >= 1 && string.Equals(args[0], "--break-ui-hide", StringComparison.OrdinalIgnoreCase))
@@ -34,7 +34,7 @@ namespace GameManagement
             if (args.Length >= 1 && string.Equals(args[0], "--ui-start-hidden", StringComparison.OrdinalIgnoreCase))
             {
                 if (!UiSignals.Exists(UiSignals.ShowBreakName))
-                    Application.Run(new MainForm(false, false, true));
+                    RunMainFormSingleInstance(false, false, true);
                 return;
             }
             if (args.Length >= 1 && string.Equals(args[0], "--session-summary", StringComparison.OrdinalIgnoreCase))
@@ -135,12 +135,43 @@ namespace GameManagement
                 return;
             }
             bool enableOnStart = args.Any(argument => string.Equals(argument, "--enable", StringComparison.OrdinalIgnoreCase));
-            Application.Run(new MainForm(enableOnStart));
+            RunMainFormSingleInstance(enableOnStart, false, false);
+        }
+
+        private static void RunMainFormSingleInstance(bool enableOnStart, bool showForBreak, bool hideOnStart)
+        {
+            bool showCreated;
+            bool showBreakCreated;
+            bool hideBreakCreated;
+            using (System.Threading.EventWaitHandle showSignal = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.ShowMainName, out showCreated))
+            using (System.Threading.EventWaitHandle showBreakSignal = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.ShowBreakName, out showBreakCreated))
+            using (System.Threading.EventWaitHandle hideBreakSignal = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.HideBreakName, out hideBreakCreated))
+            {
+                bool createdNew;
+                using (System.Threading.Mutex interfaceMutex = new System.Threading.Mutex(true, UiSignals.InterfaceMutexName, out createdNew))
+                {
+                    if (!createdNew)
+                    {
+                        if (showForBreak) showBreakSignal.Set();
+                        else if (!hideOnStart) showSignal.Set();
+                        return;
+                    }
+
+                    try { Application.Run(new MainForm(enableOnStart, showForBreak, hideOnStart)); }
+                    finally
+                    {
+                        try { interfaceMutex.ReleaseMutex(); }
+                        catch (ApplicationException) { }
+                    }
+                }
+            }
         }
     }
 
     internal static class UiSignals
     {
+        internal const string InterfaceMutexName = @"Local\GameManagementInterface_v1";
+        internal const string ShowMainName = @"Local\GameManagementShowMain_v1";
         internal const string ShowBreakName = @"Local\GameManagementShowBreak_v1";
         internal const string HideBreakName = @"Local\GameManagementHideBreak_v1";
 
@@ -682,6 +713,7 @@ namespace GameManagement
         private readonly bool hideOnStart;
         private System.Threading.EventWaitHandle showBreakEvent;
         private System.Threading.EventWaitHandle hideBreakEvent;
+        private System.Threading.EventWaitHandle showMainEvent;
         private float? peakCpuTemperature;
         private float? peakGpuTemperature;
         private bool managementStateKnown;
@@ -1149,12 +1181,14 @@ namespace GameManagement
         private void InitializeUiSignals()
         {
             bool created;
+            showMainEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.ShowMainName, out created);
             showBreakEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.ShowBreakName, out created);
             hideBreakEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, UiSignals.HideBreakName, out created);
         }
 
         private void CheckBreakUiSignals()
         {
+            if (showMainEvent != null && showMainEvent.WaitOne(0)) ShowFromTray();
             if (showBreakEvent != null && showBreakEvent.WaitOne(0)) ShowForBreak();
             if (hideBreakEvent != null && hideBreakEvent.WaitOne(0)) HideAfterBreak();
         }
@@ -2049,6 +2083,7 @@ namespace GameManagement
             performanceTimer.Dispose();
             breakUiTimer.Dispose();
             panelFlipTimer.Dispose();
+            if (showMainEvent != null) showMainEvent.Dispose();
             if (showBreakEvent != null) showBreakEvent.Dispose();
             if (hideBreakEvent != null) hideBreakEvent.Dispose();
         }

@@ -28,6 +28,15 @@ Add-Check 'No game process priority changes' (
     $watcher -notmatch 'PriorityClass|Ensure-GamePriority|Update-GamePriorityMode|priority-disabled\.flag'
 ) 'The Game Management watcher never raises, lowers, or repeatedly resets a game process priority.'
 Add-Check 'Single-instance protection' ($watcher -match 'GameManagementWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
+Add-Check 'Single interface instance' (
+    $appSource -match 'GameManagementInterface_v1' -and
+    $appSource -match 'RunMainFormSingleInstance' -and
+    $appSource -match 'new System\.Threading\.Mutex\(true, UiSignals\.InterfaceMutexName' -and
+    $appSource -match 'if \(!createdNew\)' -and
+    $appSource -match 'showSignal\.Set\(\)' -and
+    $appSource -match 'GameManagementShowMain_v1' -and
+    $appSource -match 'ShowFromTray\(\)'
+) 'Only one main interface can run; later launches signal the existing window to show and activate.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
 Add-Check 'Cached process classification' (
     $watcher -match 'processClassificationCache' -and
