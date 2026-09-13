@@ -11,6 +11,11 @@ function Invoke-PowerCfg([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "powercfg failed: $($Arguments -join ' ')" }
 }
 
+function Try-PowerCfg([string[]]$Arguments) {
+    & powercfg.exe @Arguments 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Set-DisplayBrightness([int]$percent) {
     try {
         $monitor = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction Stop |
@@ -54,8 +59,13 @@ if (-not (Test-Path -LiteralPath $backupPath)) {
 
 $watcher = Join-Path $root 'HardwareSquisher.ps1'
 $command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watcher`""
-$watchers = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like '*Documents\GameBoost\HardwareSquisher.ps1*' -and $_.ProcessId -ne $PID }
+$watcherPattern = [regex]::Escape($watcher)
+$watchers = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -in @('powershell.exe','pwsh.exe') -and
+        $_.CommandLine -match $watcherPattern -and
+        $_.ProcessId -ne $PID
+    }
 foreach ($runningWatcher in $watchers) { Stop-Process -Id $runningWatcher.ProcessId -Force }
 
 $statePath = Join-Path $root 'runtime-state.json'
@@ -86,12 +96,32 @@ Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
 
 $existingPlans = powercfg /list
 if (($existingPlans -join "`n") -notmatch [regex]::Escape($boostGuid)) {
-    Invoke-PowerCfg -Arguments @('/duplicatescheme', $highGuid, $boostGuid)
+    if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $highGuid, $boostGuid))) {
+        $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
+        if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $balancedGuid, $boostGuid))) {
+            throw 'Windows could not create a compatible Hardware Squisher power plan.'
+        }
+    }
 }
 Invoke-PowerCfg -Arguments @('/changename', $boostGuid, 'Hardware Squisher', 'Safe plugged-in gaming performance; removed by Undo-HardwareSquisher.ps1')
-Invoke-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PROCTHROTTLEMAX', '100')
-Invoke-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PERFBOOSTMODE', '2')
-Invoke-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PCIEXPRESS', 'ASPM', '0')
+$powerCapabilities = [ordered]@{
+    ProcessorMaximum = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PROCTHROTTLEMAX', '100'))
+    ProcessorBoostMode = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PERFBOOSTMODE', '2'))
+    PcieLinkState = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PCIEXPRESS', 'ASPM', '0'))
+}
+if (-not (Try-PowerCfg -Arguments @('/query', $boostGuid))) {
+    throw 'The Hardware Squisher power plan could not be verified.'
+}
+$compatibilityPath = Join-Path $root 'HARDWARE-COMPATIBILITY.txt'
+Add-Content -LiteralPath $compatibilityPath -Encoding UTF8 -Value @(
+    '',
+    'Windows power-plan capabilities:',
+    "- Processor maximum: $($powerCapabilities.ProcessorMaximum)",
+    "- Processor boost mode: $($powerCapabilities.ProcessorBoostMode)",
+    "- PCIe link-state control: $($powerCapabilities.PcieLinkState)",
+    '',
+    'Unsupported optional settings are skipped so vendor firmware remains in control.'
+)
 
 New-Item -Path $runKey -Force | Out-Null
 New-ItemProperty -LiteralPath $runKey -Name $runName -Value $command -PropertyType String -Force | Out-Null
@@ -100,4 +130,4 @@ Set-Content -LiteralPath $engineEnabledPath -Value 'enabled' -Encoding ASCII
 Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$watcher)
 Start-Sleep -Seconds 1
 Write-Host 'Hardware Squisher installed and running with normal user permissions.' -ForegroundColor Green
-Write-Host 'Lenovo fan mode remains manual through Fn+Q or Lenovo Vantage.'
+Write-Host 'GPU clocks, drivers, firmware, and vendor performance modes remain untouched.'

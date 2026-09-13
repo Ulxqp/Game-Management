@@ -19,6 +19,12 @@ Hardware Squisher is a Windows desktop utility with a deliberately retro Windows
 - Animated Windows 98-style pixel-gerbera panel
 - Single-file graphical installer and registered uninstall support
 
+## Hardware compatibility
+
+The universal Windows installer supports desktop and laptop PCs using NVIDIA GeForce RTX 20- or 30-series graphics, including Ti, SUPER, and Laptop GPU variants. RTX detection is informational: Hardware Squisher remains GPU-independent and does not change NVIDIA drivers, clocks, voltages, firmware, or vendor performance modes.
+
+Setup uses the current user's resolved Documents folder, falls back to a compatible Windows power-plan base when needed, and skips optional power settings that a PC's firmware does not expose. The application can also run with other GPU brands; built-in display brightness control remains optional and unsupported external monitors are left unchanged.
+
 ## Install
 
 Download and run [`HardwareSquisher-Setup.exe`](dist/HardwareSquisher-Setup.exe). Windows may show an Unknown publisher warning because the executable is not digitally signed.
@@ -37,7 +43,7 @@ On 64-bit Windows with .NET Framework 4 installed:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Build-HardwareSquisher.ps1
 ```
 
-This compiles the application, runs the safety checks, and creates the single-file installer one directory above the source folder.
+This compiles the AnyCPU application, runs the safety and RTX compatibility tests, and creates the single-file installer both one directory above the source folder and in `dist`.
 
 ## Screenshots
 

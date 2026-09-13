@@ -54,7 +54,8 @@ $programFiles = @(
     'Uninstall-HardwareSquisher.ps1',
     'Test-HardwareSquisherSecurity.ps1',
     'README.txt',
-    'SECURITY-REPORT.md'
+    'SECURITY-REPORT.md',
+    'HARDWARE-COMPATIBILITY.txt'
 )
 foreach ($name in $programFiles) {
     Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Force
@@ -73,4 +74,3 @@ if (-not $Quiet) {
         [Windows.Forms.MessageBoxButtons]::OK,
         [Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 }
-

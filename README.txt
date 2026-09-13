@@ -19,6 +19,15 @@ and activity log in Documents\GameBoost.
 Build-HardwareSquisherInstaller.ps1 rebuilds the single-file installer after
 the application or its packaged files are updated.
 
+HARDWARE COMPATIBILITY
+----------------------
+The universal installer supports Windows desktop and laptop PCs with NVIDIA
+GeForce RTX 20- and 30-series graphics, including Ti, SUPER, and Laptop GPU
+variants. Detection is informational: Hardware Squisher does not change GPU
+drivers, clocks, voltages, firmware, or NVIDIA settings. Setup adapts to the
+power controls exposed by each PC and also remains usable with other GPUs.
+A HARDWARE-COMPATIBILITY.txt report is written during each installation.
+
 CONTROLS
 --------
 Enable         Installs/starts Hardware Squisher and enables sign-in startup.
@@ -51,7 +60,8 @@ SAFETY
 ------
 The interface keeps the existing AC-only behavior, High priority fallback,
 brightness restoration, power-plan restoration, recovery state, and exclusions.
-It does not control Lenovo fan/thermal modes, BIOS settings, voltages, or clocks.
+It does not control vendor fan/thermal modes, BIOS settings, GPU drivers,
+voltages, or clocks.
 
 FILES
 -----

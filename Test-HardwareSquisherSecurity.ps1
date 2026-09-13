@@ -43,6 +43,29 @@ Add-Check 'Full disable restoration' (
 ) 'Power plan, brightness, and original live process priorities are restored on disable, recovery, reinstall, and undo.'
 $installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-HardwareSquisher.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
+$setup=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisherSetup.cs')
+$installerBuilder=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Build-HardwareSquisherInstaller.ps1')
+$undoScript=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-HardwareSquisher.ps1')
+Add-Check 'RTX 20/30 compatibility coverage' (
+    $setup -match 'Rtx20Or30Pattern' -and
+    $setup -match 'RTX 3050 Laptop GPU' -and
+    $setup -match 'RTX 3090' -and
+    $installerBuilder -match '--compatibility-test'
+) 'The installer self-test covers RTX 20/30 desktop, SUPER, Ti, and Laptop GPU naming variants.'
+Add-Check 'GPU-independent behavior' (
+    $text -notmatch 'nvidia-smi|NVAPI|Set-Gpu|Overclock|Undervolt' -and
+    $setup -match 'does not change GPU clocks, voltages, drivers, firmware, or NVIDIA settings'
+) 'RTX recognition is informational; the application does not issue vendor-specific GPU tuning commands.'
+Add-Check 'Adaptive Windows power settings' (
+    $installer -match 'function Try-PowerCfg' -and
+    $installer -match 'balancedGuid.*boostGuid' -and
+    $installer -match 'Unsupported optional settings are skipped'
+) 'Setup falls back to Balanced and skips unsupported optional power settings on vendor-specific firmware.'
+Add-Check 'Redirected Documents compatibility' (
+    $installer -match '\[regex\]::Escape\(\$watcher\)' -and
+    $undoScript -match '\[regex\]::Escape\(\$watcherPath\)' -and
+    $installer -notmatch '\*Documents\\GameBoost\\HardwareSquisher'
+) 'Watcher cleanup uses the resolved installation path, including redirected or localized Documents folders.'
 $task=Get-ScheduledTask -TaskName 'Hardware Squisher' -ErrorAction SilentlyContinue
 Add-Check 'No elevated Hardware Squisher task' (-not [bool]$task) $(if($task){'An elevated task exists.'}else{'No elevated task is installed.'})
 $failed=@($checks|Where-Object{-not $_.Passed});$status=if($failed.Count -eq 0){'PASS'}else{'REVIEW REQUIRED'}

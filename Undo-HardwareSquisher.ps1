@@ -36,8 +36,14 @@ function Restore-SavedPriorities($savedPriorities) {
     }
 }
 
-$watchers = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
-    Where-Object { $_.CommandLine -like '*Documents\GameBoost\HardwareSquisher.ps1*' -and $_.ProcessId -ne $PID }
+$watcherPath = Join-Path $root 'HardwareSquisher.ps1'
+$watcherPattern = [regex]::Escape($watcherPath)
+$watchers = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -in @('powershell.exe','pwsh.exe') -and
+        $_.CommandLine -match $watcherPattern -and
+        $_.ProcessId -ne $PID
+    }
 foreach ($watcher in $watchers) { Stop-Process -Id $watcher.ProcessId -Force }
 
 $restoreGuid = $balancedGuid

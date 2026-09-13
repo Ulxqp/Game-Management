@@ -6,6 +6,8 @@ engine-enabled.flag
 Legacy/
 *.setup-new
 /SECURITY-REPORT.md
+/HARDWARE-COMPATIBILITY.txt
+/HARDWARE-COMPATIBILITY.txt
 /LIVE-TEST-REPORT.md
 /SYSTEM-POWER-AUDIT.md
 /*-preview.png
