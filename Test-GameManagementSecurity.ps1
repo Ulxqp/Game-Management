@@ -77,6 +77,16 @@ Add-Check 'Plain-language timer alert' (
     $appSource -match 'Break over!' -and
     $appSource -match 'You can play again\.'
 ) 'Timer messages use short, plain-language instructions.'
+Add-Check 'Timer confirmation change tracking' (
+    $appSource -match 'private Button confirmTimerButton' -and
+    $appSource -match 'timerMinutesInput\.ValueChanged\s*\+=' -and
+    $appSource -match 'breakMinutesInput\.ValueChanged\s*\+=' -and
+    $appSource -match 'timerEnabledCheck\.CheckedChanged\s*\+=' -and
+    $appSource -match 'confirmTimerButton\.Enabled\s*=' -and
+    $appSource -match 'timerEnabledCheck\.Checked\s*!=\s*settings\.gameTimerEnabled' -and
+    $appSource -match 'timerMinutesInput\.Value\s*!=\s*settings\.gameTimerMinutes' -and
+    $appSource -match 'breakMinutesInput\.Value\s*!=\s*settings\.breakTimerMinutes'
+) 'Confirm stays disabled for saved timer values, enables when a timer setting changes, and resets after a successful save.'
 Add-Check 'Windows 98 secondary dialogs' (
     $appSource -match 'abstract class RetroDialogForm' -and
     $appSource -match 'class RetroDialogButton' -and

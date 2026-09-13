@@ -1,6 +1,12 @@
 # Game Management changelog
 
-## 2.0.0 — current
+## 2.0.1 — current
+
+- Disabled the timer **Confirm** button when the displayed timer settings already match the saved settings.
+- Made **Confirm** enable immediately when the game timer, break timer, or timer on/off setting changes.
+- Made **Confirm** return to its disabled state after either Confirm or Save settings successfully saves the values.
+
+## 2.0.0
 
 - Renamed the complete product identity to **Game Management**.
 - Renamed the application, watcher, scripts, installer, icon, previews, logs, shortcuts, startup entry, uninstall entry, internal namespace, signals, and power plan.

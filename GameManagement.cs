@@ -721,6 +721,7 @@ namespace GameManagement
         private Button enableButton;
         private Button pauseButton;
         private Button toggleLogButton;
+        private Button confirmTimerButton;
         private Label footerLabel;
         private bool activityVisible = true;
         private int expandedClientHeight = 720;
@@ -950,6 +951,7 @@ namespace GameManagement
             {
                 timerMinutesInput.Enabled = timerEnabledCheck.Checked;
                 if (breakMinutesInput != null) breakMinutesInput.Enabled = timerEnabledCheck.Checked;
+                UpdateTimerConfirmState();
             };
             settingsGroup.Controls.Add(timerEnabledCheck);
 
@@ -959,6 +961,7 @@ namespace GameManagement
             timerMinutesInput.Minimum = 1;
             timerMinutesInput.Maximum = 240;
             timerMinutesInput.TextAlign = HorizontalAlignment.Right;
+            timerMinutesInput.ValueChanged += delegate { UpdateTimerConfirmState(); };
             settingsGroup.Controls.Add(timerMinutesInput);
             settingsGroup.Controls.Add(MakeLabel("minutes", 228, 85));
 
@@ -969,10 +972,11 @@ namespace GameManagement
             breakMinutesInput.Minimum = 1;
             breakMinutesInput.Maximum = 60;
             breakMinutesInput.TextAlign = HorizontalAlignment.Right;
+            breakMinutesInput.ValueChanged += delegate { UpdateTimerConfirmState(); };
             settingsGroup.Controls.Add(breakMinutesInput);
             settingsGroup.Controls.Add(MakeLabel("minutes", 228, 109));
 
-            Button confirmTimerButton = RetroButton("Confirm", 68, 25);
+            confirmTimerButton = RetroButton("Confirm", 68, 25);
             confirmTimerButton.Location = new Point(settingsGroup.ClientSize.Width - 82, 92);
             confirmTimerButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             confirmTimerButton.Click += delegate { ConfirmTimerSettings(); };
@@ -1547,6 +1551,7 @@ namespace GameManagement
             pauseWithEscapeCheck.Checked = settings.pauseGameWithEscape;
             foldersList.Items.Clear();
             foreach (string folder in settings.gameFolders) foldersList.Items.Add(folder);
+            UpdateTimerConfirmState();
         }
 
         private bool SaveSettings()
@@ -1569,6 +1574,7 @@ namespace GameManagement
                     EnableGameManagement(false);
                 }
                 SetFooter(wasRunning ? "Settings saved; watcher restarted." : "Settings saved.");
+                UpdateTimerConfirmState();
                 RefreshStatus();
                 return true;
             }
@@ -1584,6 +1590,17 @@ namespace GameManagement
             if (!SaveSettings()) return;
             SetFooter("Timer confirmed: " + timerMinutesInput.Value + "-minute game / " + breakMinutesInput.Value + "-minute break.");
             RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
+        }
+
+        private void UpdateTimerConfirmState()
+        {
+            if (confirmTimerButton == null || settings == null || timerEnabledCheck == null ||
+                timerMinutesInput == null || breakMinutesInput == null) return;
+
+            confirmTimerButton.Enabled =
+                timerEnabledCheck.Checked != settings.gameTimerEnabled ||
+                (int)timerMinutesInput.Value != settings.gameTimerMinutes ||
+                (int)breakMinutesInput.Value != settings.breakTimerMinutes;
         }
 
         private string PrettyJson(string compact)
