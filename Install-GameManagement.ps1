@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backupPath = Join-Path $root 'install-backup.json'
-$boostGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
+$managementPlanGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
 $highGuid = 'aa5b4fa5-cac4-4211-b1d5-a151db2f975e'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$runName = 'HardwareSquisherEngine'
+$runName = 'GameManagementEngine'
 
 function Invoke-PowerCfg([string[]]$Arguments) {
     & powercfg.exe @Arguments | Out-Null
@@ -57,7 +57,7 @@ if (-not (Test-Path -LiteralPath $backupPath)) {
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $backupPath -Encoding UTF8
 }
 
-$watcher = Join-Path $root 'HardwareSquisher.ps1'
+$watcher = Join-Path $root 'GameManagement.ps1'
 $command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watcher`""
 $watcherPattern = [regex]::Escape($watcher)
 $watchers = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
@@ -77,7 +77,7 @@ if (Test-Path -LiteralPath $statePath) {
     $runtimeState = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
 }
 $activeLine = powercfg /getactivescheme
-if ($activeLine -match [regex]::Escape($boostGuid)) {
+if ($activeLine -match [regex]::Escape($managementPlanGuid)) {
     $restoreGuid = $null
     if ($runtimeState) { $restoreGuid = $runtimeState.OriginalPowerScheme }
     if (-not $restoreGuid -and (Test-Path -LiteralPath $backupPath)) {
@@ -97,22 +97,22 @@ Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
 
 $existingPlans = powercfg /list
-if (($existingPlans -join "`n") -notmatch [regex]::Escape($boostGuid)) {
-    if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $highGuid, $boostGuid))) {
+if (($existingPlans -join "`n") -notmatch [regex]::Escape($managementPlanGuid)) {
+    if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $highGuid, $managementPlanGuid))) {
         $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
-        if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $balancedGuid, $boostGuid))) {
-            throw 'Windows could not create a compatible Hardware Squisher power plan.'
+        if (-not (Try-PowerCfg -Arguments @('/duplicatescheme', $balancedGuid, $managementPlanGuid))) {
+            throw 'Windows could not create a compatible Game Management power plan.'
         }
     }
 }
-Invoke-PowerCfg -Arguments @('/changename', $boostGuid, 'Hardware Squisher', 'Safe plugged-in gaming performance; removed by Undo-HardwareSquisher.ps1')
+Invoke-PowerCfg -Arguments @('/changename', $managementPlanGuid, 'Game Management', 'Safe plugged-in gaming performance; removed by Undo-GameManagement.ps1')
 $powerCapabilities = [ordered]@{
-    ProcessorMaximum = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PROCTHROTTLEMAX', '100'))
-    ProcessorBoostMode = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PROCESSOR', 'PERFBOOSTMODE', '2'))
-    PcieLinkState = (Try-PowerCfg -Arguments @('/setacvalueindex', $boostGuid, 'SUB_PCIEXPRESS', 'ASPM', '0'))
+    ProcessorMaximum = (Try-PowerCfg -Arguments @('/setacvalueindex', $managementPlanGuid, 'SUB_PROCESSOR', 'PROCTHROTTLEMAX', '100'))
+    ProcessorBoostMode = (Try-PowerCfg -Arguments @('/setacvalueindex', $managementPlanGuid, 'SUB_PROCESSOR', 'PERFBOOSTMODE', '2'))
+    PcieLinkState = (Try-PowerCfg -Arguments @('/setacvalueindex', $managementPlanGuid, 'SUB_PCIEXPRESS', 'ASPM', '0'))
 }
-if (-not (Try-PowerCfg -Arguments @('/query', $boostGuid))) {
-    throw 'The Hardware Squisher power plan could not be verified.'
+if (-not (Try-PowerCfg -Arguments @('/query', $managementPlanGuid))) {
+    throw 'The Game Management power plan could not be verified.'
 }
 $compatibilityPath = Join-Path $root 'HARDWARE-COMPATIBILITY.txt'
 Add-Content -LiteralPath $compatibilityPath -Encoding UTF8 -Value @(
@@ -127,9 +127,9 @@ Add-Content -LiteralPath $compatibilityPath -Encoding UTF8 -Value @(
 
 New-Item -Path $runKey -Force | Out-Null
 New-ItemProperty -LiteralPath $runKey -Name $runName -Value $command -PropertyType String -Force | Out-Null
-Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameBoost' -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameManagement' -Force -ErrorAction SilentlyContinue
 Set-Content -LiteralPath $engineEnabledPath -Value 'enabled' -Encoding ASCII
 Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$watcher)
 Start-Sleep -Seconds 1
-Write-Host 'Hardware Squisher installed and running with normal user permissions.' -ForegroundColor Green
+Write-Host 'Game Management installed and running with normal user permissions.' -ForegroundColor Green
 Write-Host 'GPU clocks, drivers, firmware, and vendor performance modes remain untouched.'

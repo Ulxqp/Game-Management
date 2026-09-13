@@ -1,41 +1,41 @@
-HARDWARE SQUISHER
+GAME MANAGEMENT
 =================
 
-Hardware Squisher is a Windows desktop and notification-area Game Management
-controller. Its data remains in Documents\GameBoost for upgrade compatibility.
+Game Management is a Windows desktop and notification-area Game Management
+controller. Its data remains in Documents\GameManagement for upgrade compatibility.
 
 RUN
 ---
-Double-click HardwareSquisher.exe.
+Double-click GameManagement.exe.
 
 INSTALLER
 ---------
-Run HardwareSquisher-Setup.exe to install or upgrade the application. Setup
+Run GameManagement-Setup.exe to install or upgrade the application. Setup
 preserves existing settings, creates Desktop and Start Menu shortcuts, starts
-the background watcher, and adds Hardware Squisher to Windows Installed Apps.
+the background watcher, and adds Game Management to Windows Installed Apps.
 Uninstalling safely restores captured Windows settings and keeps the settings
-and activity log in Documents\GameBoost.
+and activity log in Documents\GameManagement.
 
-Build-HardwareSquisherInstaller.ps1 rebuilds the single-file installer after
+Build-GameManagementInstaller.ps1 rebuilds the single-file installer after
 the application or its packaged files are updated.
 
 HARDWARE COMPATIBILITY
 ----------------------
 The universal installer supports Windows desktop and laptop PCs with NVIDIA
 GeForce RTX 20- and 30-series graphics, including Ti, SUPER, and Laptop GPU
-variants. Detection is informational: Hardware Squisher does not change GPU
+variants. Detection is informational: Game Management does not change GPU
 drivers, clocks, voltages, firmware, or NVIDIA settings. Setup adapts to the
 power controls exposed by each PC and also remains usable with other GPUs.
 A HARDWARE-COMPATIBILITY.txt report is written during each installation.
 
 CONTROLS
 --------
-Enable         Installs/starts Hardware Squisher and enables sign-in startup.
+Enable         Installs/starts Game Management and enables sign-in startup.
 Pause          Stops the watcher, restores captured system settings, and
                disables sign-in startup without deleting the power plan.
 Save settings  Saves brightness, scan interval, and game-library folders.
 Add            Adds a launcher or standalone game-library folder.
-Hardware Squisher does not change game process priority.
+Game Management does not change game process priority.
 
 GAME TIMER
 ----------
@@ -71,7 +71,7 @@ game is active or the interface is visible, and keeps the highest temperature
 reached during the game session. Hidden idle mode skips sensor polling. Green means Safe,
 orange means Warm, and red means Danger. A sensor says Unavailable when Windows
 or the laptop firmware does not expose it safely to a normal-user application.
-If MSI Afterburner is already running, Hardware Squisher reads its CPU
+If MSI Afterburner is already running, Game Management reads its CPU
 temperature monitoring value through a read-only shared-memory connection.
 It does not start profiles or change any MSI Afterburner setting.
 When the final game process closes, a simple session summary appears. The game,
@@ -79,7 +79,7 @@ date, start/end time, total game time, timer cycles, and peak CPU/GPU temperatur
 also appended to GameSessionHistory.txt.
 
 The application can be closed to the notification area. Exiting the interface
-does not stop the background watcher. Use Pause to stop Hardware Squisher.
+does not stop the background watcher. Use Pause to stop Game Management.
 Use Hide activity to collapse the Recent activity panel; Show activity restores
 it without affecting logging.
 Use Flowers on the Current status panel to flip to three animated pixel-art
@@ -95,8 +95,8 @@ are read-only.
 
 FILES
 -----
-HardwareSquisher.exe              Application
-HardwareSquisher.cs               Source code
-HardwareSquisher.ico              Application, taskbar, and notification-area icon
-HardwareSquisher.ps1              Background controller
-Pause-HardwareSquisher.ps1        Safe pause/restoration helper
+GameManagement.exe              Application
+GameManagement.cs               Source code
+GameManagement.ico              Application, taskbar, and notification-area icon
+GameManagement.ps1              Background controller
+Pause-GameManagement.ps1        Safe pause/restoration helper

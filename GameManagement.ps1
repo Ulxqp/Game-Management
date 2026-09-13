@@ -8,8 +8,8 @@ $timerStatePath = Join-Path $root 'timer-state.json'
 $performanceStatePath = Join-Path $root 'performance-state.json'
 $lastSessionPath = Join-Path $root 'last-session.json'
 $sessionHistoryPath = Join-Path $root 'GameSessionHistory.txt'
-$logPath = Join-Path $root 'HardwareSquisher.log'
-$boostGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
+$logPath = Join-Path $root 'GameManagement.log'
+$managementPlanGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
 $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
 $active = $false
 $originalGuid = $null
@@ -32,11 +32,11 @@ $sessionGameNames = @()
 $mutex = $null
 
 Add-Type -AssemblyName System.Windows.Forms
-if (-not ('HardwareSquisher.GameInput' -as [type])) {
+if (-not ('GameManagement.GameInput' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-namespace HardwareSquisher {
+namespace GameManagement {
     public static class GameInput {
         [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -56,14 +56,14 @@ function Write-Log([string]$message) {
 }
 
 function Set-BreakInterface([bool]$show) {
-    $app = Join-Path $root 'HardwareSquisher.exe'
+    $app = Join-Path $root 'GameManagement.exe'
     if (-not (Test-Path -LiteralPath $app)) { return }
     $argument = if ($show) { '--break-ui-show' } else { '--break-ui-hide' }
     Start-Process -FilePath $app -ArgumentList $argument
 }
 
 function Start-BackgroundInterface {
-    $app = Join-Path $root 'HardwareSquisher.exe'
+    $app = Join-Path $root 'GameManagement.exe'
     if (Test-Path -LiteralPath $app) {
         Start-Process -FilePath $app -ArgumentList '--ui-start-hidden'
     }
@@ -81,7 +81,7 @@ function Write-GameSessionSummary {
     $endedAt = Get-Date
     $startedAt = $script:sessionStartedAt
     if ($null -eq $startedAt -and (Test-Path -LiteralPath $statePath)) {
-        try { $startedAt = [datetime](Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json).BoostStarted } catch {}
+        try { $startedAt = [datetime](Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json).ManagementStarted } catch {}
     }
     if ($null -eq $startedAt) { $startedAt = $endedAt }
     $duration = $endedAt - $startedAt
@@ -122,7 +122,7 @@ function Write-GameSessionSummary {
         "Peak GPU temperature: $peakGpuText"
     ) | Add-Content -LiteralPath $sessionHistoryPath -Encoding UTF8
     Write-Log "Game session saved for $gameName; duration $(Format-SessionDuration $duration); cycles $cycles; peak CPU temperature $peakCpuText; peak GPU temperature $peakGpuText"
-    $app = Join-Path $root 'HardwareSquisher.exe'
+    $app = Join-Path $root 'GameManagement.exe'
     if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app -ArgumentList '--session-summary' }
 }
 
@@ -144,39 +144,39 @@ function Send-GameEscape($gameProcesses, [string]$reason) {
     }
 
     $targetHandle = [IntPtr]$target.MainWindowHandle
-    $foregroundHandle = [HardwareSquisher.GameInput]::GetForegroundWindow()
+    $foregroundHandle = [GameManagement.GameInput]::GetForegroundWindow()
     $foregroundProcessId = [uint32]0
     $targetProcessId = [uint32]0
-    $foregroundThread = if ($foregroundHandle -ne [IntPtr]::Zero) { [HardwareSquisher.GameInput]::GetWindowThreadProcessId($foregroundHandle, [ref]$foregroundProcessId) } else { [uint32]0 }
-    $targetThread = [HardwareSquisher.GameInput]::GetWindowThreadProcessId($targetHandle, [ref]$targetProcessId)
-    $currentThread = [HardwareSquisher.GameInput]::GetCurrentThreadId()
+    $foregroundThread = if ($foregroundHandle -ne [IntPtr]::Zero) { [GameManagement.GameInput]::GetWindowThreadProcessId($foregroundHandle, [ref]$foregroundProcessId) } else { [uint32]0 }
+    $targetThread = [GameManagement.GameInput]::GetWindowThreadProcessId($targetHandle, [ref]$targetProcessId)
+    $currentThread = [GameManagement.GameInput]::GetCurrentThreadId()
     $attachedForeground = $false
     $attachedTarget = $false
 
     try {
         if ($foregroundThread -ne 0 -and $foregroundThread -ne $currentThread) {
-            $attachedForeground = [HardwareSquisher.GameInput]::AttachThreadInput($currentThread, $foregroundThread, $true)
+            $attachedForeground = [GameManagement.GameInput]::AttachThreadInput($currentThread, $foregroundThread, $true)
         }
         if ($targetThread -ne 0 -and $targetThread -ne $currentThread) {
-            $attachedTarget = [HardwareSquisher.GameInput]::AttachThreadInput($currentThread, $targetThread, $true)
+            $attachedTarget = [GameManagement.GameInput]::AttachThreadInput($currentThread, $targetThread, $true)
         }
-        [HardwareSquisher.GameInput]::ShowWindowAsync($targetHandle, 9) | Out-Null
-        [HardwareSquisher.GameInput]::BringWindowToTop($targetHandle) | Out-Null
-        [HardwareSquisher.GameInput]::SetForegroundWindow($targetHandle) | Out-Null
+        [GameManagement.GameInput]::ShowWindowAsync($targetHandle, 9) | Out-Null
+        [GameManagement.GameInput]::BringWindowToTop($targetHandle) | Out-Null
+        [GameManagement.GameInput]::SetForegroundWindow($targetHandle) | Out-Null
     } finally {
-        if ($attachedTarget) { [HardwareSquisher.GameInput]::AttachThreadInput($currentThread, $targetThread, $false) | Out-Null }
-        if ($attachedForeground) { [HardwareSquisher.GameInput]::AttachThreadInput($currentThread, $foregroundThread, $false) | Out-Null }
+        if ($attachedTarget) { [GameManagement.GameInput]::AttachThreadInput($currentThread, $targetThread, $false) | Out-Null }
+        if ($attachedForeground) { [GameManagement.GameInput]::AttachThreadInput($currentThread, $foregroundThread, $false) | Out-Null }
     }
 
     Start-Sleep -Milliseconds 150
-    if ([HardwareSquisher.GameInput]::GetForegroundWindow() -ne $targetHandle) {
+    if ([GameManagement.GameInput]::GetForegroundWindow() -ne $targetHandle) {
         Write-Log "Escape skipped safely for $reason because Windows did not focus $($target.ProcessName)"
         return $false
     }
 
-    [HardwareSquisher.GameInput]::keybd_event(0x1B, 0, 0, [UIntPtr]::Zero)
+    [GameManagement.GameInput]::keybd_event(0x1B, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 50
-    [HardwareSquisher.GameInput]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
+    [GameManagement.GameInput]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
     Write-Log "Escape sent to detected game $($target.ProcessName) for $reason"
     return $true
 }
@@ -251,7 +251,7 @@ function Save-State {
     @{
         OriginalPowerScheme = $script:originalGuid
         OriginalBrightness = $script:originalBrightness
-        BoostStarted = (Get-Date).ToString('o')
+        ManagementStarted = (Get-Date).ToString('o')
     } |
         ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
@@ -286,7 +286,7 @@ function Update-GameTimer($gameProcesses) {
     if (-not $script:gameTimerEnabled -or $null -eq $script:timerDeadline -or $script:timerAlerted) { return }
     if ((Get-Date) -lt $script:timerDeadline) { return }
 
-    $alertApp = Join-Path $root 'HardwareSquisher.exe'
+    $alertApp = Join-Path $root 'GameManagement.exe'
     if ($script:timerPhase -eq 'Game') {
         Write-Log "Game timer finished after $script:gameTimerMinutes minutes; break timer started for $script:breakTimerMinutes minutes"
         $script:timerPhase = 'Break'
@@ -392,7 +392,7 @@ function Find-RunningGames($folders, $excluded) {
     return @($matches)
 }
 
-function Start-Boost($gameProcesses) {
+function Start-Management($gameProcesses) {
     $script:sessionStartedAt = Get-Date
     $script:sessionGameNames = @($gameProcesses.ProcessName | Sort-Object -Unique)
     Remove-Item -LiteralPath $performanceStatePath -Force -ErrorAction SilentlyContinue
@@ -402,8 +402,8 @@ function Start-Boost($gameProcesses) {
     Update-IdleBrightness $true
     $script:originalBrightness = $script:lastIdleBrightness
     Save-State
-    if (-not (Set-Scheme $boostGuid)) {
-        Write-Log 'Boost could not activate because the dedicated power plan was unavailable'
+    if (-not (Set-Scheme $managementPlanGuid)) {
+        Write-Log 'Game Management could not activate because the dedicated power plan was unavailable'
         Clear-State
         return
     }
@@ -418,10 +418,10 @@ function Start-Boost($gameProcesses) {
     }
     $script:active = $true
     Start-GameTimer
-    Write-Log "Hardware Squisher ON; previous plan $script:originalGuid; games: $($gameProcesses.ProcessName -join ', ')"
+    Write-Log "Game Management ON; previous plan $script:originalGuid; games: $($gameProcesses.ProcessName -join ', ')"
 }
 
-function Stop-Boost([bool]$showSessionSummary = $false) {
+function Stop-Management([bool]$showSessionSummary = $false) {
     $savedState = $null
     if (Test-Path -LiteralPath $statePath) {
         $savedState = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
@@ -435,8 +435,8 @@ function Stop-Boost([bool]$showSessionSummary = $false) {
         $restoreBrightness = [int]$savedState.OriginalBrightness
     }
     if (-not $restoreGuid) { $restoreGuid = $balancedGuid }
-    if (Set-Scheme $restoreGuid) { Write-Log "Hardware Squisher OFF; restored plan $restoreGuid" }
-    else { Write-Log "Hardware Squisher OFF but restoring plan $restoreGuid failed" }
+    if (Set-Scheme $restoreGuid) { Write-Log "Game Management OFF; restored plan $restoreGuid" }
+    else { Write-Log "Game Management OFF but restoring plan $restoreGuid failed" }
     if ($null -ne $restoreBrightness) {
         if (Set-DisplayBrightness $restoreBrightness) { Write-Log "Brightness restored to $restoreBrightness%" }
         else { Write-Log "Brightness restoration to $restoreBrightness% failed" }
@@ -455,7 +455,7 @@ function Stop-Boost([bool]$showSessionSummary = $false) {
 
 try {
     $createdNew = $false
-    $mutex = [Threading.Mutex]::new($true, 'Local\HardwareSquisherWatcher_v1', [ref]$createdNew)
+    $mutex = [Threading.Mutex]::new($true, 'Local\GameManagementWatcher_v1', [ref]$createdNew)
     if (-not $createdNew) { exit 0 }
 
     if (Test-Path -LiteralPath $statePath) {
@@ -500,18 +500,18 @@ try {
         $onAcPower = Test-AcPower
         if (-not $onAcPower) {
             if ($active) {
-                Write-Log 'AC power disconnected; disabling Hardware Squisher'
-                Stop-Boost $false
+                Write-Log 'AC power disconnected; disabling Game Management'
+                Stop-Management $false
             }
             Update-IdleBrightness
         } elseif ($running.Count -gt 0) {
-            if (-not $active) { Start-Boost $running }
-            elseif ((Get-ActiveScheme) -ne $boostGuid) { Set-Scheme $boostGuid | Out-Null }
+            if (-not $active) { Start-Management $running }
+            elseif ((Get-ActiveScheme) -ne $managementPlanGuid) { Set-Scheme $managementPlanGuid | Out-Null }
             if ($active) {
                 Update-GameTimer $running
             }
         } else {
-            if ($active) { Stop-Boost $true }
+            if ($active) { Stop-Management $true }
             Update-IdleBrightness
         }
         if ($Once) { break }
@@ -519,7 +519,7 @@ try {
     } while ($true)
 }
 finally {
-    if ($active) { Stop-Boost $false }
+    if ($active) { Stop-Management $false }
     if ($mutex) {
         try { $mutex.ReleaseMutex() } catch {}
         $mutex.Dispose()

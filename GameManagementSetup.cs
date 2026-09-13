@@ -11,21 +11,21 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace HardwareSquisherInstaller
+namespace GameManagementInstaller
 {
     internal static class Program
     {
         internal static readonly string[] PayloadNames =
         {
-            "HardwareSquisher.exe",
-            "HardwareSquisher.cs",
-            "HardwareSquisher.ico",
-            "HardwareSquisher.ps1",
-            "Install-HardwareSquisher.ps1",
-            "Pause-HardwareSquisher.ps1",
-            "Undo-HardwareSquisher.ps1",
-            "Uninstall-HardwareSquisher.ps1",
-            "Test-HardwareSquisherSecurity.ps1",
+            "GameManagement.exe",
+            "GameManagement.cs",
+            "GameManagement.ico",
+            "GameManagement.ps1",
+            "Install-GameManagement.ps1",
+            "Pause-GameManagement.ps1",
+            "Undo-GameManagement.ps1",
+            "Uninstall-GameManagement.ps1",
+            "Test-GameManagementSecurity.ps1",
             "README.txt",
             "TEMPERATURE-GUIDE.md",
             "settings.json"
@@ -130,7 +130,7 @@ namespace HardwareSquisherInstaller
         internal static void WriteReport(string installRoot, HardwareCompatibilityReport report)
         {
             StringBuilder text = new StringBuilder();
-            text.AppendLine("Hardware Squisher compatibility report");
+            text.AppendLine("Game Management compatibility report");
             text.AppendLine("Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
             text.AppendLine("Windows: " + Environment.OSVersion.VersionString);
             text.AppendLine("OS architecture: " + (Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit"));
@@ -187,7 +187,7 @@ namespace HardwareSquisherInstaller
         {
             HardwareCompatibilityReport hardware = HardwareCompatibility.Inspect();
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
-            Text = "Hardware Squisher Setup";
+            Text = "Game Management Setup";
             ClientSize = new Size(540, 340);
             MinimumSize = MaximumSize = Size;
             StartPosition = FormStartPosition.CenterScreen;
@@ -205,7 +205,7 @@ namespace HardwareSquisherInstaller
             Controls.Add(titleBar);
 
             Label title = new Label();
-            title.Text = "▣  Hardware Squisher Setup";
+            title.Text = "▣  Game Management Setup";
             title.ForeColor = Color.White;
             title.Font = new Font(Font, FontStyle.Bold);
             title.AutoSize = true;
@@ -219,7 +219,7 @@ namespace HardwareSquisherInstaller
             titleBar.Controls.Add(close);
 
             Label heading = new Label();
-            heading.Text = "HARDWARE SQUISHER";
+            heading.Text = "GAME MANAGEMENT";
             heading.Font = new Font("Arial", 23F, FontStyle.Bold);
             heading.AutoSize = true;
             heading.Location = new Point(28, 49);
@@ -258,14 +258,14 @@ namespace HardwareSquisherInstaller
             details.Controls.Add(compatibility);
 
             Label destination = new Label();
-            destination.Text = "Location: " + Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameBoost");
+            destination.Text = "Location: " + Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameManagement");
             destination.AutoEllipsis = true;
             destination.Location = new Point(98, 77);
             destination.Size = new Size(365, 24);
             details.Controls.Add(destination);
 
             launchCheck = new CheckBox();
-            launchCheck.Text = "Launch Hardware Squisher after installation";
+            launchCheck.Text = "Launch Game Management after installation";
             launchCheck.Checked = true;
             launchCheck.AutoSize = true;
             launchCheck.Location = new Point(31, 244);
@@ -339,7 +339,7 @@ namespace HardwareSquisherInstaller
                 progress.Value = 100;
                 status.Text = "Installation complete.";
                 installing = false;
-                MessageBox.Show(this, "Hardware Squisher was installed successfully.", "Hardware Squisher Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "Game Management was installed successfully.", "Game Management Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Close();
             }
             catch (Exception ex)
@@ -349,7 +349,7 @@ namespace HardwareSquisherInstaller
                 cancelButton.Enabled = true;
                 launchCheck.Enabled = true;
                 status.Text = "Installation did not complete.";
-                MessageBox.Show(this, ex.Message, "Hardware Squisher Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, ex.Message, "Game Management Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -364,12 +364,12 @@ namespace HardwareSquisherInstaller
 
         private void InstallApplication()
         {
-            string installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameBoost");
+            string installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameManagement");
             Directory.CreateDirectory(installRoot);
             HardwareCompatibilityReport hardware = HardwareCompatibility.Inspect();
 
             SetProgress(8, "Closing the previous application...");
-            foreach (Process process in Process.GetProcessesByName("HardwareSquisher"))
+            foreach (Process process in Process.GetProcessesByName("GameManagement"))
             {
                 try
                 {
@@ -391,15 +391,15 @@ namespace HardwareSquisherInstaller
             HardwareCompatibility.WriteReport(installRoot, hardware);
 
             SetProgress(55, "Configuring Game Management power mode...");
-            RunInstallerScript(Path.Combine(installRoot, "Install-HardwareSquisher.ps1"));
+            RunInstallerScript(Path.Combine(installRoot, "Install-GameManagement.ps1"));
 
             SetProgress(78, "Creating shortcuts...");
-            string appPath = Path.Combine(installRoot, "HardwareSquisher.exe");
-            string iconPath = Path.Combine(installRoot, "HardwareSquisher.ico");
-            string startMenuFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Hardware Squisher");
+            string appPath = Path.Combine(installRoot, "GameManagement.exe");
+            string iconPath = Path.Combine(installRoot, "GameManagement.ico");
+            string startMenuFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Game Management");
             Directory.CreateDirectory(startMenuFolder);
-            CreateShortcut(Path.Combine(startMenuFolder, "Hardware Squisher.lnk"), appPath, installRoot, iconPath, "Hardware Squisher");
-            CreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Hardware Squisher.lnk"), appPath, installRoot, iconPath, "Hardware Squisher");
+            CreateShortcut(Path.Combine(startMenuFolder, "Game Management.lnk"), appPath, installRoot, iconPath, "Game Management");
+            CreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Game Management.lnk"), appPath, installRoot, iconPath, "Game Management");
 
             SetProgress(90, "Registering uninstall support...");
             RegisterUninstaller(installRoot, iconPath);
@@ -467,14 +467,14 @@ namespace HardwareSquisherInstaller
 
         private static void RegisterUninstaller(string installRoot, string iconPath)
         {
-            string uninstallScript = Path.Combine(installRoot, "Uninstall-HardwareSquisher.ps1");
+            string uninstallScript = Path.Combine(installRoot, "Uninstall-GameManagement.ps1");
             string command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + uninstallScript + "\"";
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\HardwareSquisher"))
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\GameManagement"))
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
-                key.SetValue("DisplayName", "Hardware Squisher");
-                key.SetValue("DisplayVersion", "1.13.0");
-                key.SetValue("Publisher", "Hardware Squisher");
+                key.SetValue("DisplayName", "Game Management");
+                key.SetValue("DisplayVersion", "2.0.0");
+                key.SetValue("Publisher", "Game Management");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);
                 key.SetValue("UninstallString", command);

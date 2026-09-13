@@ -1,6 +1,13 @@
-# Hardware Squisher changelog
+# Game Management changelog
 
-## 1.13.0 — current
+## 2.0.0 — current
+
+- Renamed the complete product identity to **Game Management**.
+- Renamed the application, watcher, scripts, installer, icon, previews, logs, shortcuts, startup entry, uninstall entry, internal namespace, signals, and power plan.
+- Changed the installation folder to `Documents\GameManagement` while preserving the existing settings, logs, history, and rollback backups during migration.
+- Kept all Game Management behavior, safety limits, and low-overhead monitoring unchanged.
+
+## 1.13.0
 
 - Reduced idle tray overhead by suspending temperature and timer-display polling when no game is active and the interface is hidden.
 - Reused process classifications between scans so unchanged background processes do not require repeated executable-path inspection.
@@ -29,7 +36,7 @@
 - A persistent safety switch prevents the watcher from silently setting High priority again.
 - The button changes to **Start priority**, which resumes automatic High priority on the next watcher scan.
 - Removed the unfinished Hide overlay / Show overlay button and its RTSS control code.
-- Exited game-process entries and SnowRunner's crash reporter are ignored so they cannot keep boost or High priority active after the game closes.
+- Exited game-process entries and SnowRunner's crash reporter are ignored so they cannot keep management mode or High priority active after the game closes.
 
 ## 1.10.0
 
@@ -69,7 +76,7 @@
 
 - Added an enabled-by-default option to press Escape on the detected game when a break starts and ends.
 - Escape input is target-verified: the watcher selects the detected game window, brings it forward, verifies focus, and cancels safely if focus fails.
-- The main Hardware Squisher interface now appears automatically at break start and hides to the notification area at break end.
+- The main Game Management interface now appears automatically at break start and hides to the notification area at break end.
 - Added live CPU and GPU usage with per-game-session peak percentages, refreshed every second. Replaced by temperature monitoring in 1.9.0.
 - Added a simple session summary when the final game process exits.
 - Added `GameSessionHistory.txt`, recording the game, date, start/end time, total game time, timer cycles, and peak CPU/GPU use.
@@ -119,10 +126,10 @@
 
 ## 1.4.0
 
-- Hardware Squisher now requires AC power and cannot activate while the laptop is unplugged.
+- Game Management now requires AC power and cannot activate while the laptop is unplugged.
 - Unplugging during a game immediately restores the original power plan, brightness, and process priorities.
-- Reconnecting AC while a game remains open allows a fresh, fully captured boost session.
-- Added exact pre-boost process-priority capture and restoration.
+- Reconnecting AC while a game remains open allows a fresh, fully captured management session.
+- Added exact pre-activation process-priority capture and restoration.
 - Fixed the transient 0% brightness edge case by caching brightness while idle, before game launch transitions.
 - Extended interrupted-run, reinstall, and undo recovery to restore saved process priorities.
 - Added security checks for AC-only gating, full disable restoration, and stable brightness capture.
@@ -143,7 +150,7 @@
 - Verifies that High priority actually remained applied before logging success.
 - Uses Above Normal only as a safe fallback when High is unavailable.
 - Confirmed the dedicated plan uses 100% AC minimum/maximum CPU state, Aggressive processor boost, active cooling, and PCIe link-state power saving off.
-- Made reinstall idempotent: an active GameBoost plan is safely restored before setup, and an existing dedicated plan is updated instead of deleted.
+- Made reinstall idempotent: an active GameManagement plan is safely restored before setup, and an existing dedicated plan is updated instead of deleted.
 - Installer now fails clearly if any required `powercfg` operation fails.
 - Completed a real SnowRunner test: automatic activation, priority correction, and exact restoration to Balanced all passed.
 - Completed a second real-game test with The Witcher 3; activation, repeated priority correction, and exact restoration to Balanced all passed.
@@ -163,5 +170,5 @@
 
 ## 1.0.0
 
-- Added generic Steam game detection and a dedicated Game Boost power plan.
+- Added generic Steam game detection and a dedicated Game Management power plan.
 - Added automatic activation, restoration, startup, backup, and undo.

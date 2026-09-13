@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $checks = [Collections.Generic.List[object]]::new()
 function Add-Check([string]$Name,[bool]$Passed,[string]$Detail){$checks.Add([pscustomobject]@{Name=$Name;Passed=$Passed;Detail=$Detail})}
 $scripts=Get-ChildItem -LiteralPath $PackagePath -Filter '*.ps1'
-$audited=@($scripts|Where-Object Name -ne 'Test-HardwareSquisherSecurity.ps1')
+$audited=@($scripts|Where-Object Name -ne 'Test-GameManagementSecurity.ps1')
 $parseErrors=@(); foreach($script in $scripts){$tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors);$parseErrors+=@($errors|ForEach-Object{"$($script.Name): $($_.Message)"})}
 Add-Check 'PowerShell syntax' ($parseErrors.Count -eq 0) $(if($parseErrors.Count){$parseErrors -join '; '}else{'All scripts parse successfully.'})
 $text=($audited|ForEach-Object{Get-Content -Raw -LiteralPath $_.FullName}) -join "`n"
@@ -13,21 +13,30 @@ $network=[regex]::Matches($text,'https?://|wss?://|System\.Net\.|Net\.WebClient'
 Add-Check 'No network access' (@($network).Count -eq 0) 'No web, socket, download, or upload code found.'
 $hardware=[regex]::Matches($text,'LENOVO_GAMEZONE|SetSmartFan|SetFan|Fan_Set_Table|SetBIOS|OverClock|UnderVolt','IgnoreCase')|ForEach-Object Value|Sort-Object -Unique
 Add-Check 'No fan or firmware control' (@($hardware).Count -eq 0) 'Fan mode, firmware, BIOS, voltage, and clocks are untouched.'
-$watcher=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.ps1')
-$appSource=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'HardwareSquisher.cs')
+$watcher=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'GameManagement.ps1')
+$appSource=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'GameManagement.cs')
+$legacyNames = @('Hardware' + 'Squisher', 'Hardware' + ' Squisher', 'Game' + 'Boost')
+$legacyIdentityFound = $false
+foreach ($legacyName in $legacyNames) {
+    if (($text + "`n" + $appSource).IndexOf($legacyName, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $legacyIdentityFound = $true }
+    if (Get-ChildItem -LiteralPath $PackagePath -File | Where-Object { $_.Name.IndexOf($legacyName, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) {
+        $legacyIdentityFound = $true
+    }
+}
+Add-Check 'Complete Game Management identity' (-not $legacyIdentityFound) 'Application scripts contain no previous product, executable, service, or data-folder identity.'
 Add-Check 'No game process priority changes' (
     $watcher -notmatch 'PriorityClass|Ensure-GamePriority|Update-GamePriorityMode|priority-disabled\.flag'
 ) 'The Game Management watcher never raises, lowers, or repeatedly resets a game process priority.'
-Add-Check 'Single-instance protection' ($watcher -match 'HardwareSquisherWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
+Add-Check 'Single-instance protection' ($watcher -match 'GameManagementWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
 Add-Check 'Cached process classification' (
     $watcher -match 'processClassificationCache' -and
     $watcher -match 'StartTicks' -and
     $watcher -match 'seenProcessIds'
 ) 'Unchanged processes reuse their safe game/non-game classification instead of reopening every executable path each scan.'
-Add-Check 'Exact restoration' ($watcher -match 'OriginalPowerScheme' -and $watcher -match 'Stop-Boost') 'The pre-game plan is captured and restored.'
+Add-Check 'Exact restoration' ($watcher -match 'OriginalPowerScheme' -and $watcher -match 'Stop-Management') 'The pre-game plan is captured and restored.'
 $settings=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'settings.json') | ConvertFrom-Json
-$undo=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-HardwareSquisher.ps1')
+$undo=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-GameManagement.ps1')
 Add-Check 'Bounded brightness restoration' (
     [int]$settings.gameBrightnessPercent -ge 0 -and
     [int]$settings.gameBrightnessPercent -le 100 -and
@@ -44,8 +53,8 @@ Add-Check 'Stable brightness capture' (
 Add-Check 'AC-only activation guard' (
     $watcher -match 'function Test-AcPower' -and
     $watcher -match 'if \(-not \$onAcPower\)' -and
-    $watcher -match 'AC power disconnected; disabling Hardware Squisher'
-) 'Hardware Squisher cannot activate on battery and disables itself when AC is disconnected.'
+    $watcher -match 'AC power disconnected; disabling Game Management'
+) 'Game Management cannot activate on battery and disables itself when AC is disconnected.'
 Add-Check 'Fast AC status path' (
     $watcher -match 'SystemInformation.*PowerStatus\.PowerLineStatus' -and
     $watcher -match 'Get-CimInstance.*BatteryStatus'
@@ -95,7 +104,7 @@ Add-Check 'Target-verified Escape control' (
 Add-Check 'Automatic break interface flow' (
     $watcher -match '--break-ui-show' -and
     $watcher -match '--break-ui-hide' -and
-    $appSource -match 'HardwareSquisherShowBreak_v1' -and
+    $appSource -match 'GameManagementShowBreak_v1' -and
     $appSource -match 'ShowForBreak\(\)' -and
     $appSource -match 'HideAfterBreak\(\)'
 ) 'The main interface is signaled to show when a break starts and hide when the break ends.'
@@ -131,7 +140,7 @@ Add-Check 'Priority controls removed from interface' (
 Add-Check 'Exited game cleanup' (
     $watcher -match 'if \(\$process\.HasExited\) \{ continue \}' -and
     $watcher -match "'crash_reporter','crashreporter'"
-) 'Exited process entries and known crash reporters are ignored so boost can restore after the real game closes.'
+) 'Exited process entries and known crash reporters are ignored so management mode can restore after the real game closes.'
 Add-Check 'Persistent game session notes' (
     $watcher -match 'GameSessionHistory\.txt' -and
     $watcher -match 'Total game time:' -and
@@ -140,14 +149,14 @@ Add-Check 'Persistent game session notes' (
     $watcher -match 'Peak GPU temperature:' -and
     $appSource -match 'class SessionSummaryForm'
 ) 'A plain-text history and visible exit summary store the game, date/time, duration, cycles, and peak CPU/GPU temperatures.'
-$installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-HardwareSquisher.ps1')
+$installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-GameManagement.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
-$setupPath=Join-Path $PackagePath 'HardwareSquisherSetup.cs'
-$installerBuilderPath=Join-Path $PackagePath 'Build-HardwareSquisherInstaller.ps1'
+$setupPath=Join-Path $PackagePath 'GameManagementSetup.cs'
+$installerBuilderPath=Join-Path $PackagePath 'Build-GameManagementInstaller.ps1'
 $packageBuildFilesPresent=(Test-Path -LiteralPath $setupPath) -and (Test-Path -LiteralPath $installerBuilderPath)
 $setup=if($packageBuildFilesPresent){Get-Content -Raw -LiteralPath $setupPath}else{''}
 $installerBuilder=if($packageBuildFilesPresent){Get-Content -Raw -LiteralPath $installerBuilderPath}else{''}
-$undoScript=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-HardwareSquisher.ps1')
+$undoScript=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-GameManagement.ps1')
 Add-Check 'RTX 20/30 compatibility coverage' (
     -not $packageBuildFilesPresent -or (
         $setup -match 'Rtx20Or30Pattern' -and
@@ -162,18 +171,18 @@ Add-Check 'GPU-independent behavior' (
 ) $(if($packageBuildFilesPresent){'RTX recognition is informational; the application does not issue vendor-specific GPU tuning commands.'}else{'Installed runtime scripts contain no vendor-specific GPU tuning commands.'})
 Add-Check 'Adaptive Windows power settings' (
     $installer -match 'function Try-PowerCfg' -and
-    $installer -match 'balancedGuid.*boostGuid' -and
+    $installer -match 'balancedGuid.*managementPlanGuid' -and
     $installer -match 'Unsupported optional settings are skipped'
 ) 'Setup falls back to Balanced and skips unsupported optional power settings on vendor-specific firmware.'
 Add-Check 'Redirected Documents compatibility' (
     $installer -match '\[regex\]::Escape\(\$watcher\)' -and
     $undoScript -match '\[regex\]::Escape\(\$watcherPath\)' -and
-    $installer -notmatch '\*Documents\\GameBoost\\HardwareSquisher'
+    $installer -notmatch '\*Documents\\GameManagement\\GameManagement'
 ) 'Watcher cleanup uses the resolved installation path, including redirected or localized Documents folders.'
-$task=Get-ScheduledTask -TaskName 'Hardware Squisher' -ErrorAction SilentlyContinue
-Add-Check 'No elevated Hardware Squisher task' (-not [bool]$task) $(if($task){'An elevated task exists.'}else{'No elevated task is installed.'})
+$task=Get-ScheduledTask -TaskName 'Game Management' -ErrorAction SilentlyContinue
+Add-Check 'No elevated Game Management task' (-not [bool]$task) $(if($task){'An elevated task exists.'}else{'No elevated task is installed.'})
 $failed=@($checks|Where-Object{-not $_.Passed});$status=if($failed.Count -eq 0){'PASS'}else{'REVIEW REQUIRED'}
-$lines=@('# Hardware Squisher security report','',"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')",'',"Overall result: **$status**",'','| Check | Result | Detail |','|---|---:|---|')
+$lines=@('# Game Management security report','',"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')",'',"Overall result: **$status**",'','| Check | Result | Detail |','|---|---:|---|')
 foreach($check in $checks){$result=if($check.Passed){'PASS'}else{'FAIL'};$lines+="| $($check.Name) | $result | $($check.Detail -replace '\|','\|') |"}
 $lines+=@('','## SHA-256 hashes','','```text');foreach($hash in ($scripts|Get-FileHash -Algorithm SHA256|Sort-Object Path)){$lines+="$($hash.Hash)  $([IO.Path]::GetFileName($hash.Path))"};$lines+='```'
 $lines|Set-Content -LiteralPath $ReportPath -Encoding UTF8

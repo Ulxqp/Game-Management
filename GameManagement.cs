@@ -12,7 +12,7 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace HardwareSquisher
+namespace GameManagement
 {
     internal static class Program
     {
@@ -52,7 +52,7 @@ namespace HardwareSquisher
                     }
                     catch
                     {
-                        MessageBox.Show("The saved game summary could not be opened.", "Hardware Squisher", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show("The saved game summary could not be opened.", "Game Management", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
                 return;
@@ -141,8 +141,8 @@ namespace HardwareSquisher
 
     internal static class UiSignals
     {
-        internal const string ShowBreakName = @"Local\HardwareSquisherShowBreak_v1";
-        internal const string HideBreakName = @"Local\HardwareSquisherHideBreak_v1";
+        internal const string ShowBreakName = @"Local\GameManagementShowBreak_v1";
+        internal const string HideBreakName = @"Local\GameManagementHideBreak_v1";
 
         internal static bool TrySignal(string name)
         {
@@ -323,7 +323,7 @@ namespace HardwareSquisher
             ShowInTaskbar = true;
             TopMost = true;
             KeyPreview = true;
-            BuildRetroChrome("Hardware Squisher Alarm");
+            BuildRetroChrome("Game Management Alarm");
 
             Label headingLabel = new Label
             {
@@ -467,7 +467,7 @@ namespace HardwareSquisher
             MinimizeBox = false;
             ShowInTaskbar = true;
             TopMost = true;
-            BuildRetroChrome("Hardware Squisher - Session saved");
+            BuildRetroChrome("Game Management - Session saved");
 
             Label heading = new Label
             {
@@ -647,7 +647,7 @@ namespace HardwareSquisher
 
     internal sealed class MainForm : Form
     {
-        private const string BoostGuid = "c8b1a303-89f5-4b03-ae3f-10b46a186527";
+        private const string ManagementPlanGuid = "c8b1a303-89f5-4b03-ae3f-10b46a186527";
         private const int WmNclButtonDown = 0xA1;
         private const int HtCaption = 0x2;
         private const int WsMinimizeBox = 0x00020000;
@@ -684,8 +684,8 @@ namespace HardwareSquisher
         private System.Threading.EventWaitHandle hideBreakEvent;
         private float? peakCpuTemperature;
         private float? peakGpuTemperature;
-        private bool boostStateKnown;
-        private bool previousBoostState;
+        private bool managementStateKnown;
+        private bool previousManagementState;
         private DateTime lastWatcherStartAttempt = DateTime.MinValue;
         private bool exiting;
         private GameSettings settings;
@@ -746,19 +746,19 @@ namespace HardwareSquisher
             this.enableOnStart = enableOnStart;
             this.showForBreakOnStart = showForBreakOnStart;
             this.hideOnStart = hideOnStart;
-            string documentsRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameBoost");
-            rootPath = File.Exists(Path.Combine(documentsRoot, "HardwareSquisher.ps1"))
+            string documentsRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GameManagement");
+            rootPath = File.Exists(Path.Combine(documentsRoot, "GameManagement.ps1"))
                 ? documentsRoot
                 : AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             settingsPath = Path.Combine(rootPath, "settings.json");
-            logPath = Path.Combine(rootPath, "HardwareSquisher.log");
+            logPath = Path.Combine(rootPath, "GameManagement.log");
             statePath = Path.Combine(rootPath, "runtime-state.json");
             timerStatePath = Path.Combine(rootPath, "timer-state.json");
             performanceStatePath = Path.Combine(rootPath, "performance-state.json");
             engineEnabledPath = Path.Combine(rootPath, "engine-enabled.flag");
-            watcherPath = Path.Combine(rootPath, "HardwareSquisher.ps1");
-            installerPath = Path.Combine(rootPath, "Install-HardwareSquisher.ps1");
-            pausePath = Path.Combine(rootPath, "Pause-HardwareSquisher.ps1");
+            watcherPath = Path.Combine(rootPath, "GameManagement.ps1");
+            installerPath = Path.Combine(rootPath, "Install-GameManagement.ps1");
+            pausePath = Path.Combine(rootPath, "Pause-GameManagement.ps1");
 
             BuildWindow();
             BuildTrayIcon();
@@ -789,7 +789,7 @@ namespace HardwareSquisher
 
         private void BuildWindow()
         {
-            Text = "Hardware Squisher";
+            Text = "Game Management";
             ClientSize = new Size(820, 720);
             MinimumSize = new Size(720, 680);
             StartPosition = FormStartPosition.CenterScreen;
@@ -807,7 +807,7 @@ namespace HardwareSquisher
             titleBar.MouseDown += DragWindow;
 
             Label title = new Label();
-            title.Text = "▣  Hardware Squisher";
+            title.Text = "▣  Game Management";
             title.ForeColor = Color.White;
             title.Font = new Font("Microsoft Sans Serif", 9F, FontStyle.Bold);
             title.AutoSize = true;
@@ -838,7 +838,7 @@ namespace HardwareSquisher
             body.BringToFront();
 
             Label brand = new Label();
-            brand.Text = "HARDWARE SQUISHER";
+            brand.Text = "GAME MANAGEMENT";
             brand.Font = new Font("Arial", 26F, FontStyle.Bold);
             brand.AutoSize = true;
             brand.Location = new Point(17, 12);
@@ -906,12 +906,12 @@ namespace HardwareSquisher
 
             enableButton = RetroButton("Enable", 92, 26);
             enableButton.Location = new Point(418, 93);
-            enableButton.Click += delegate { EnableGameBoost(); };
+            enableButton.Click += delegate { EnableGameManagement(); };
             body.Controls.Add(enableButton);
 
             pauseButton = RetroButton("Pause", 92, 26);
             pauseButton.Location = new Point(520, 93);
-            pauseButton.Click += delegate { PauseGameBoost(); };
+            pauseButton.Click += delegate { PauseGameManagement(); };
             body.Controls.Add(pauseButton);
 
             Button refreshButton = RetroButton("Refresh", 92, 26);
@@ -979,7 +979,7 @@ namespace HardwareSquisher
             settingsGroup.Controls.Add(confirmTimerButton);
 
             startupCheck = new CheckBox();
-            startupCheck.Text = "Start Hardware Squisher when I sign in";
+            startupCheck.Text = "Start Game Management when I sign in";
             startupCheck.Location = new Point(16, 130);
             startupCheck.AutoSize = true;
             startupCheck.CheckedChanged += delegate
@@ -1135,7 +1135,7 @@ namespace HardwareSquisher
             Shown += delegate
             {
                 RefreshStatus();
-                if (enableOnStart && !IsWatcherRunning()) EnableGameBoost(false);
+                if (enableOnStart && !IsWatcherRunning()) EnableGameManagement(false);
                 if (showForBreakOnStart) ShowForBreak();
                 else if (hideOnStart) HideAfterBreak();
                 if (Visible || File.Exists(statePath)) RefreshTemperatureMetrics();
@@ -1433,14 +1433,14 @@ namespace HardwareSquisher
         private void BuildTrayIcon()
         {
             ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Show Hardware Squisher", null, delegate { ShowFromTray(); });
+            menu.Items.Add("Show Game Management", null, delegate { ShowFromTray(); });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Enable", null, delegate { EnableGameBoost(); });
-            menu.Items.Add("Pause", null, delegate { PauseGameBoost(); });
+            menu.Items.Add("Enable", null, delegate { EnableGameManagement(); });
+            menu.Items.Add("Pause", null, delegate { PauseGameManagement(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit application", null, delegate { ExitApplication(); });
             trayIcon.Icon = LoadApplicationIcon();
-            trayIcon.Text = "Hardware Squisher";
+            trayIcon.Text = "Game Management";
             trayIcon.ContextMenuStrip = menu;
             trayIcon.MouseClick += delegate(object sender, MouseEventArgs e)
             {
@@ -1565,8 +1565,8 @@ namespace HardwareSquisher
                 bool wasRunning = IsWatcherRunning();
                 if (wasRunning)
                 {
-                    PauseGameBoost(false);
-                    EnableGameBoost(false);
+                    PauseGameManagement(false);
+                    EnableGameManagement(false);
                 }
                 SetFooter(wasRunning ? "Settings saved; watcher restarted." : "Settings saved.");
                 RefreshStatus();
@@ -1638,49 +1638,49 @@ namespace HardwareSquisher
             if (foldersList.SelectedIndex >= 0) foldersList.Items.RemoveAt(foldersList.SelectedIndex);
         }
 
-        private void EnableGameBoost()
+        private void EnableGameManagement()
         {
-            EnableGameBoost(true);
+            EnableGameManagement(true);
         }
 
-        private void EnableGameBoost(bool showMessage)
+        private void EnableGameManagement(bool showMessage)
         {
             if (!File.Exists(installerPath))
             {
-                ShowError("Install-HardwareSquisher.ps1 was not found in:\r\n" + rootPath);
+                ShowError("Install-GameManagement.ps1 was not found in:\r\n" + rootPath);
                 return;
             }
             try
             {
                 RunPowerShell(installerPath, true);
                 File.WriteAllText(engineEnabledPath, "enabled");
-                SetFooter("Hardware Squisher enabled and set to start with Windows.");
-                if (showMessage) RetroMessage("Hardware Squisher is enabled and monitoring your game folders.", "Hardware Squisher");
+                SetFooter("Game Management enabled and set to start with Windows.");
+                if (showMessage) RetroMessage("Game Management is enabled and monitoring your game folders.", "Game Management");
             }
-            catch (Exception ex) { ShowError("Hardware Squisher could not be enabled.\r\n\r\n" + ex.Message); }
+            catch (Exception ex) { ShowError("Game Management could not be enabled.\r\n\r\n" + ex.Message); }
             RefreshStatus();
         }
 
-        private void PauseGameBoost()
+        private void PauseGameManagement()
         {
-            PauseGameBoost(true);
+            PauseGameManagement(true);
         }
 
-        private void PauseGameBoost(bool showMessage)
+        private void PauseGameManagement(bool showMessage)
         {
             if (!File.Exists(pausePath))
             {
-                ShowError("Pause-HardwareSquisher.ps1 was not found in:\r\n" + rootPath);
+                ShowError("Pause-GameManagement.ps1 was not found in:\r\n" + rootPath);
                 return;
             }
             try
             {
                 if (File.Exists(engineEnabledPath)) File.Delete(engineEnabledPath);
                 RunPowerShell(pausePath, true);
-                SetFooter("Hardware Squisher paused; captured system settings restored.");
-                if (showMessage) RetroMessage("Hardware Squisher is paused. The previous power plan and brightness were restored.", "Hardware Squisher");
+                SetFooter("Game Management paused; captured system settings restored.");
+                if (showMessage) RetroMessage("Game Management is paused. The previous power plan and brightness were restored.", "Game Management");
             }
-            catch (Exception ex) { ShowError("Hardware Squisher could not be paused safely.\r\n\r\n" + ex.Message); }
+            catch (Exception ex) { ShowError("Game Management could not be paused safely.\r\n\r\n" + ex.Message); }
             RefreshStatus();
         }
 
@@ -1688,7 +1688,7 @@ namespace HardwareSquisher
         {
             if (enabled)
             {
-                if (!IsWatcherRunning()) EnableGameBoost(false);
+                if (!IsWatcherRunning()) EnableGameManagement(false);
                 else EnsureRunEntry();
             }
             else
@@ -1699,8 +1699,8 @@ namespace HardwareSquisher
                     {
                         if (key != null)
                         {
-                            key.DeleteValue("HardwareSquisherEngine", false);
-                            key.DeleteValue("CodexGameBoost", false);
+                            key.DeleteValue("GameManagementEngine", false);
+                            key.DeleteValue("CodexGameManagement", false);
                         }
                     }
                     SetFooter("Windows sign-in startup disabled; current watcher left running.");
@@ -1715,8 +1715,8 @@ namespace HardwareSquisher
             string command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + watcherPath + "\"";
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
             {
-                key.SetValue("HardwareSquisherEngine", command, RegistryValueKind.String);
-                key.DeleteValue("CodexGameBoost", false);
+                key.SetValue("GameManagementEngine", command, RegistryValueKind.String);
+                key.DeleteValue("CodexGameManagement", false);
             }
         }
 
@@ -1748,35 +1748,35 @@ namespace HardwareSquisher
                 {
                     lastWatcherStartAttempt = DateTime.Now;
                     RunPowerShell(watcherPath, false);
-                    SetFooter("Restarting the Hardware Squisher watcher...");
+                    SetFooter("Restarting the Game Management watcher...");
                 }
                 bool stateActive = File.Exists(statePath);
                 if (!Visible)
                 {
-                    TrackBoostState(stateActive);
-                    trayIcon.Text = watcher && !stateActive ? "Hardware Squisher" : (stateActive ? "Hardware Squisher — ACTIVE" : "Hardware Squisher — paused");
+                    TrackManagementState(stateActive);
+                    trayIcon.Text = watcher && !stateActive ? "Game Management" : (stateActive ? "Game Management — ACTIVE" : "Game Management — paused");
                     return;
                 }
                 string activeSchemeOutput = RunCapture("powercfg.exe", "/getactivescheme");
                 string activeSchemeGuid = GetActiveSchemeGuid(activeSchemeOutput);
-                bool boosted = stateActive || activeSchemeGuid == BoostGuid;
-                TrackBoostState(boosted);
+                bool managed = stateActive || activeSchemeGuid == ManagementPlanGuid;
+                TrackManagementState(managed);
                 string activePlan = GetActiveSchemeName(activeSchemeOutput, activeSchemeGuid);
-                string game = GetActiveGameFromLog(boosted);
+                string game = GetActiveGameFromLog(managed);
                 int? brightness = GetBrightness();
                 bool startup = HasStartupEntry();
 
-                statusLamp.BackColor = boosted ? Color.Lime : (watcher ? Color.Yellow : Color.Gray);
-                statusValue.Text = boosted ? "GAME ACTIVE" : (watcher ? "Ready / monitoring" : "Paused");
-                gameValue.Text = boosted ? game : "None";
+                statusLamp.BackColor = managed ? Color.Lime : (watcher ? Color.Yellow : Color.Gray);
+                statusValue.Text = managed ? "GAME ACTIVE" : (watcher ? "Ready / monitoring" : "Paused");
+                gameValue.Text = managed ? game : "None";
                 planValue.Text = string.IsNullOrEmpty(activePlan) ? "Unavailable" : activePlan;
                 brightnessValue.Text = brightness.HasValue ? brightness.Value + "%" : "Unavailable";
-                RefreshTimerDisplay(boosted);
+                RefreshTimerDisplay(managed);
                 watcherValue.Text = watcher ? "Running" : "Stopped";
                 enableButton.Enabled = !watcher;
-                pauseButton.Enabled = watcher || boosted;
+                pauseButton.Enabled = watcher || managed;
                 startupCheck.Checked = startup;
-                trayIcon.Text = watcher && !boosted ? "Hardware Squisher" : (boosted ? "Hardware Squisher — ACTIVE" : "Hardware Squisher — paused");
+                trayIcon.Text = watcher && !managed ? "Game Management" : (managed ? "Game Management — ACTIVE" : "Game Management — paused");
                 if (activityVisible) ReadRecentLog();
             }
             catch (Exception ex)
@@ -1790,7 +1790,7 @@ namespace HardwareSquisher
             try
             {
                 bool createdNew;
-                using (System.Threading.Mutex watcherMutex = new System.Threading.Mutex(true, @"Local\HardwareSquisherWatcher_v1", out createdNew))
+                using (System.Threading.Mutex watcherMutex = new System.Threading.Mutex(true, @"Local\GameManagementWatcher_v1", out createdNew))
                 {
                     if (!createdNew) return true;
                     watcherMutex.ReleaseMutex();
@@ -1818,12 +1818,12 @@ namespace HardwareSquisher
             return false;
         }
 
-        private void TrackBoostState(bool boosted)
+        private void TrackManagementState(bool managed)
         {
-            if (boostStateKnown && boosted == previousBoostState) return;
-            if (boosted) ResetTemperaturePeaks();
-            previousBoostState = boosted;
-            boostStateKnown = true;
+            if (managementStateKnown && managed == previousManagementState) return;
+            if (managed) ResetTemperaturePeaks();
+            previousManagementState = managed;
+            managementStateKnown = true;
         }
 
         private static string GetActiveSchemeGuid(string output)
@@ -1874,12 +1874,12 @@ namespace HardwareSquisher
             return null;
         }
 
-        private string GetActiveGameFromLog(bool boosted)
+        private string GetActiveGameFromLog(bool managed)
         {
-            if (!boosted || !File.Exists(logPath)) return "None";
+            if (!managed || !File.Exists(logPath)) return "None";
             try
             {
-                string line = File.ReadLines(logPath).Reverse().FirstOrDefault(item => item.IndexOf("Hardware Squisher ON", StringComparison.OrdinalIgnoreCase) >= 0);
+                string line = File.ReadLines(logPath).Reverse().FirstOrDefault(item => item.IndexOf("Game Management ON", StringComparison.OrdinalIgnoreCase) >= 0);
                 if (line == null) return "Detected game";
                 int marker = line.IndexOf("games:", StringComparison.OrdinalIgnoreCase);
                 return marker >= 0 ? line.Substring(marker + 6).Trim() : "Detected game";
@@ -1887,7 +1887,7 @@ namespace HardwareSquisher
             catch { return "Detected game"; }
         }
 
-        private void RefreshTimerDisplay(bool boosted)
+        private void RefreshTimerDisplay(bool managed)
         {
             if (timerValue == null || minutesLeftValue == null || cycleValue == null) return;
             if (settings == null || !settings.gameTimerEnabled)
@@ -1897,7 +1897,7 @@ namespace HardwareSquisher
                 SetLabelText(cycleValue, "0");
                 return;
             }
-            if (!boosted)
+            if (!managed)
             {
                 int readyMinutes = Math.Max(1, settings.gameTimerMinutes);
                 SetLabelText(timerValue, "Ready");
@@ -1956,7 +1956,7 @@ namespace HardwareSquisher
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
-                    return key != null && key.GetValue("HardwareSquisherEngine") != null;
+                    return key != null && key.GetValue("GameManagementEngine") != null;
             }
             catch { return false; }
         }
@@ -1976,7 +1976,7 @@ namespace HardwareSquisher
 
         private void OpenLog()
         {
-            if (!File.Exists(logPath)) { RetroMessage("The activity log has not been created yet.", "Hardware Squisher"); return; }
+            if (!File.Exists(logPath)) { RetroMessage("The activity log has not been created yet.", "Game Management"); return; }
             Process.Start(new ProcessStartInfo(logPath) { UseShellExecute = true });
         }
 
@@ -1984,7 +1984,7 @@ namespace HardwareSquisher
         {
             string report = Path.Combine(rootPath, "SYSTEM-POWER-AUDIT.md");
             if (!File.Exists(report)) report = Path.Combine(rootPath, "SECURITY-REPORT.md");
-            if (!File.Exists(report)) { RetroMessage("No diagnostic report was found.", "Hardware Squisher"); return; }
+            if (!File.Exists(report)) { RetroMessage("No diagnostic report was found.", "Game Management"); return; }
             Process.Start(new ProcessStartInfo(report) { UseShellExecute = true });
         }
 
@@ -2048,7 +2048,7 @@ namespace HardwareSquisher
 
         private void ShowError(string message)
         {
-            MessageBox.Show(this, message, "Hardware Squisher", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, message, "Game Management", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

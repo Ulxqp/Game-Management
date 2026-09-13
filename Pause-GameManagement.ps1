@@ -1,10 +1,9 @@
 $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backupPath = Join-Path $root 'install-backup.json'
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
 $engineEnabledPath = Join-Path $root 'engine-enabled.flag'
-$boostGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
+$logPath = Join-Path $root 'GameManagement.log'
 $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
@@ -36,40 +35,33 @@ function Restore-SavedPriorities($savedPriorities) {
     }
 }
 
-$watcherPath = Join-Path $root 'HardwareSquisher.ps1'
-$watcherPattern = [regex]::Escape($watcherPath)
 $watchers = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
         $_.Name -in @('powershell.exe','pwsh.exe') -and
-        $_.CommandLine -match $watcherPattern -and
+        $_.CommandLine -like '*GameManagement.ps1*' -and
+        $_.CommandLine -notlike '*Pause-GameManagement.ps1*' -and
+        $_.CommandLine -notlike '*Install-GameManagement.ps1*' -and
         $_.ProcessId -ne $PID
     }
 foreach ($watcher in $watchers) { Stop-Process -Id $watcher.ProcessId -Force }
 
 $restoreGuid = $balancedGuid
-$backup = $null
-if (Test-Path -LiteralPath $backupPath) {
-    $backup = Get-Content -Raw -LiteralPath $backupPath | ConvertFrom-Json
-    if ($backup.OriginalPowerScheme) { $restoreGuid = $backup.OriginalPowerScheme }
-}
+$state = $null
 if (Test-Path -LiteralPath $statePath) {
     $state = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
-    if ($state.OriginalPowerScheme) { $restoreGuid = $state.OriginalPowerScheme }
-    if ($null -ne $state.OriginalBrightness) {
-        Set-DisplayBrightness ([int]$state.OriginalBrightness) | Out-Null
+    if ($state.OriginalPowerScheme -match '^[0-9a-fA-F-]{36}$') {
+        $restoreGuid = [string]$state.OriginalPowerScheme
     }
-    Restore-SavedPriorities @($state.OriginalPriorities)
-}
-powercfg /setactive $restoreGuid | Out-Null
-
-if ($backup -and $backup.RunExisted) {
-    New-Item -Path $runKey -Force | Out-Null
-    New-ItemProperty -LiteralPath $runKey -Name 'HardwareSquisherEngine' -Value $backup.RunValue -PropertyType String -Force | Out-Null
-} else {
-    Remove-ItemProperty -LiteralPath $runKey -Name 'HardwareSquisherEngine' -Force
-    Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameBoost' -Force
 }
 
-powercfg /delete $boostGuid | Out-Null
-Remove-Item -LiteralPath $statePath,$timerStatePath,$engineEnabledPath,$backupPath -Force
-Write-Host 'Hardware Squisher was removed and the captured Windows settings were restored.' -ForegroundColor Green
+powercfg.exe /setactive $restoreGuid | Out-Null
+if ($state -and $null -ne $state.OriginalBrightness) {
+    Set-DisplayBrightness ([int]$state.OriginalBrightness) | Out-Null
+}
+if ($state) { Restore-SavedPriorities @($state.OriginalPriorities) }
+Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $engineEnabledPath -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -LiteralPath $runKey -Name 'GameManagementEngine' -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameManagement' -Force -ErrorAction SilentlyContinue
+Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') Game Management paused; restored plan $restoreGuid" -Encoding UTF8

@@ -7,17 +7,17 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 }
 
 & $compiler /nologo /target:winexe /platform:anycpu /optimize+ `
-    ('/win32icon:' + (Join-Path $root 'HardwareSquisher.ico')) `
+    ('/win32icon:' + (Join-Path $root 'GameManagement.ico')) `
     /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll `
     /reference:System.Windows.Forms.dll /reference:System.Management.dll `
     /reference:System.Web.Extensions.dll `
-    ('/out:' + (Join-Path $root 'HardwareSquisher.exe')) `
-    (Join-Path $root 'HardwareSquisher.cs')
+    ('/out:' + (Join-Path $root 'GameManagement.exe')) `
+    (Join-Path $root 'GameManagement.cs')
 if ($LASTEXITCODE -ne 0) { throw "Application compilation failed with exit code $LASTEXITCODE." }
 
-& (Join-Path $root 'Test-HardwareSquisherSecurity.ps1')
+& (Join-Path $root 'Test-GameManagementSecurity.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The safety checks did not complete.' }
 
-& (Join-Path $root 'Build-HardwareSquisherInstaller.ps1')
+& (Join-Path $root 'Build-GameManagementInstaller.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The installer build did not complete.' }
 

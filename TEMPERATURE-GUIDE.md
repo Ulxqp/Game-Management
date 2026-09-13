@@ -1,4 +1,4 @@
-# Hardware Squisher temperature guide
+# Game Management temperature guide
 
 The dashboard checks temperature once per second. This is display-only: it does not change fans, clocks, voltages, or thermal limits.
 
@@ -11,9 +11,9 @@ The dashboard checks temperature once per second. This is display-only: it does 
 
 These are conservative warning bands for this laptop, not universal temperature ranges. Intel lists the i5-12450HX maximum junction temperature as 100°C. The installed NVIDIA driver reports an 87°C target temperature, a 97°C slowdown temperature, and a 100°C shutdown temperature.
 
-If a value says **Unavailable**, Windows or Lenovo firmware did not expose that sensor to a normal-user program. Hardware Squisher deliberately does not install or use a privileged low-level hardware driver to bypass that restriction.
+If a value says **Unavailable**, Windows or Lenovo firmware did not expose that sensor to a normal-user program. Game Management deliberately does not install or use a privileged low-level hardware driver to bypass that restriction.
 
-On this laptop, MSI Afterburner is the preferred CPU sensor provider. Hardware Squisher reads the `CPU temperature` entry only when Afterburner is already running. The connection is read-only and cannot apply a profile or change clocks, voltage, power limits, fans, or thermal settings.
+On this laptop, MSI Afterburner is the preferred CPU sensor provider. Game Management reads the `CPU temperature` entry only when Afterburner is already running. The connection is read-only and cannot apply a profile or change clocks, voltage, power limits, fans, or thermal settings.
 
 ## Sources
 
