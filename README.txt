@@ -44,7 +44,7 @@ detected. When it finishes, the configured break timer starts automatically.
 At the end of the break, a fresh game timer starts, creating a repeating
 game/break cycle while the game remains open. The dashboard shows the active
 phase, an exact MM:SS value beside Minutes left, and the current cycle number.
-The timer display is updated independently for smooth display. Confirm applies
+The visible timer display is updated independently for smooth display. Confirm applies
 new game and break durations immediately. If the interface is closed, the
 background watcher still tracks the timers and opens a topmost alarm. The
 Windows alert sound repeats until Stop alarm is pressed. The alert uses short
@@ -66,8 +66,9 @@ If Windows cannot focus the game, no key is sent and the reason is logged.
 
 LIVE TEMPERATURES AND SESSION HISTORY
 -------------------------------------
-The Current status panel updates CPU and GPU temperature every second and keeps
-the highest temperature reached during the game session. Green means Safe,
+The Current status panel updates CPU and GPU temperature every second while a
+game is active or the interface is visible, and keeps the highest temperature
+reached during the game session. Hidden idle mode skips sensor polling. Green means Safe,
 orange means Warm, and red means Danger. A sensor says Unavailable when Windows
 or the laptop firmware does not expose it safely to a normal-user application.
 If MSI Afterburner is already running, Hardware Squisher reads its CPU

@@ -21,6 +21,7 @@ Hardware Squisher is a Windows desktop Game Management utility with a deliberate
 - Read-only CPU-temperature integration with an already-running MSI Afterburner
 - A saved session history with game, date/time, duration, cycles, and CPU/GPU peaks
 - Taskbar and notification-area controls
+- Low-overhead idle tray mode with full one-second temperature monitoring during games
 - Collapsible activity log
 - Animated Windows 98-style pixel-gerbera panel
 - Single-file graphical installer and registered uninstall support
@@ -53,10 +54,10 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v1.12.1 package was verified on September 14, 2026 before publication. The status indicator stays clear of the Mode row, and the Game Management watcher contains no process-priority controls. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. Secondary-dialog buttons use a fixed classic border so focus cannot add an inconsistent heavy edge. Hide activity aligns with Open log and Diagnostics. MSI Afterburner CPU temperature access is read-only. The timer cycle itself continues in the background.
+The v1.13.0 package was verified on September 14, 2026 before publication. Hidden idle operation avoids unnecessary sensor, timer-display, power-plan, brightness, and executable-path work; one-second temperature monitoring remains active during games and while the window is visible. The status indicator stays clear of the Mode row, and the Game Management watcher contains no process-priority controls. When a timer ends, a topmost plain-language Windows 98-style alert repeats the Windows alarm sound until **Stop alarm** is pressed. MSI Afterburner CPU temperature access is read-only, and the timer cycle itself continues in the background.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, sensor-access, portability, and interface-alignment suite: **29/29 checks passed**
+- PowerShell safety, sensor-access, portability, optimization, and interface-alignment suite: **33/33 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)

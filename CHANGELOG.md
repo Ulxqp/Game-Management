@@ -1,6 +1,15 @@
 # Hardware Squisher changelog
 
-## 1.12.1 — current
+## 1.13.0 — current
+
+- Reduced idle tray overhead by suspending temperature and timer-display polling when no game is active and the interface is hidden.
+- Reused process classifications between scans so unchanged background processes do not require repeated executable-path inspection.
+- Replaced routine WMI AC checks with the lightweight Windows power-status API while keeping WMI as a fallback.
+- Reduced idle brightness queries while still taking a fresh reading immediately before Game Management activates.
+- Combined the interface's duplicate active-power-plan lookups into one query per visible refresh.
+- Kept one-second CPU/GPU temperature updates during games and while the interface is visible.
+
+## 1.12.1
 
 - Moved the status indicator upward so it no longer overlaps the Mode row.
 - Kept the existing Windows 98 layout and all Game Management behavior unchanged.

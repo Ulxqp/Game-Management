@@ -20,6 +20,11 @@ Add-Check 'No game process priority changes' (
 ) 'The Game Management watcher never raises, lowers, or repeatedly resets a game process priority.'
 Add-Check 'Single-instance protection' ($watcher -match 'HardwareSquisherWatcher_v1' -and $watcher -match 'Threading\.Mutex') 'Duplicate watchers exit immediately.'
 Add-Check 'Normalized generic detection' ($watcher -match 'GetFullPath' -and $watcher -match 'libraryfolders\.vdf') 'Steam paths and libraries are detected without game-specific entries.'
+Add-Check 'Cached process classification' (
+    $watcher -match 'processClassificationCache' -and
+    $watcher -match 'StartTicks' -and
+    $watcher -match 'seenProcessIds'
+) 'Unchanged processes reuse their safe game/non-game classification instead of reopening every executable path each scan.'
 Add-Check 'Exact restoration' ($watcher -match 'OriginalPowerScheme' -and $watcher -match 'Stop-Boost') 'The pre-game plan is captured and restored.'
 $settings=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'settings.json') | ConvertFrom-Json
 $undo=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Undo-HardwareSquisher.ps1')
@@ -32,13 +37,19 @@ Add-Check 'Bounded brightness restoration' (
 ) 'Built-in display brightness is bounded to 0-100, captured before gaming, and restored by normal shutdown, recovery, reinstall, and undo.'
 Add-Check 'Stable brightness capture' (
     $watcher -match 'lastIdleBrightness' -and
+    $watcher -match 'Update-IdleBrightness \$true' -and
+    $watcher -match 'idleBrightnessRefreshIntervalSeconds\s*=\s*30' -and
     $watcher -match 'originalBrightness\s*=\s*\$script:lastIdleBrightness'
-) 'Brightness is cached before game launch transitions instead of first sampled during fullscreen startup.'
+) 'Brightness is sampled immediately before activation and otherwise refreshed at a low idle rate.'
 Add-Check 'AC-only activation guard' (
     $watcher -match 'function Test-AcPower' -and
     $watcher -match 'if \(-not \$onAcPower\)' -and
     $watcher -match 'AC power disconnected; disabling Hardware Squisher'
 ) 'Hardware Squisher cannot activate on battery and disables itself when AC is disconnected.'
+Add-Check 'Fast AC status path' (
+    $watcher -match 'SystemInformation.*PowerStatus\.PowerLineStatus' -and
+    $watcher -match 'Get-CimInstance.*BatteryStatus'
+) 'The normal AC check uses the lightweight Windows power-status API while retaining the prior WMI fallback.'
 Add-Check 'Full disable restoration' (
     $watcher -match 'OriginalPowerScheme' -and
     $watcher -match 'OriginalBrightness' -and
@@ -97,6 +108,16 @@ Add-Check 'Read-only CPU and GPU temperatures' (
     $appSource -match 'Danger' -and
     $appSource -notmatch '--power-limit|-pl\s|SetSmartFan|SetFan'
 ) 'CPU and GPU temperatures and session peaks refresh every second using read-only queries, with color and unavailable handling.'
+Add-Check 'Idle tray sensor suspension' (
+    $appSource -match 'if \(!Visible && !File\.Exists\(statePath\)\)' -and
+    $appSource -match 'if \(File\.Exists\(performanceStatePath\)\) File\.Delete\(performanceStatePath\);' -and
+    $appSource -match 'if \(Visible\) RefreshTimerDisplay'
+) 'Hidden idle operation skips GPU, CPU, and timer display polling, removes stale session snapshots, and keeps active monitoring real time.'
+Add-Check 'Single power-plan status query' (
+    $appSource -match 'activeSchemeOutput\s*=\s*RunCapture\("powercfg\.exe", "/getactivescheme"\)' -and
+    $appSource -match 'GetActiveSchemeGuid\(activeSchemeOutput\)' -and
+    $appSource -match 'GetActiveSchemeName\(activeSchemeOutput, activeSchemeGuid\)'
+) 'A visible status refresh parses one powercfg result instead of launching powercfg twice.'
 Add-Check 'Read-only MSI Afterburner CPU sensor' (
     $appSource -match 'MemoryMappedFile\.OpenExisting\("MAHMSharedMemory", MemoryMappedFileRights\.Read\)' -and
     $appSource -match 'CreateViewAccessor\(0, 0, MemoryMappedFileAccess\.Read\)' -and

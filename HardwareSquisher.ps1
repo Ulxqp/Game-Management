@@ -15,6 +15,9 @@ $active = $false
 $originalGuid = $null
 $originalBrightness = $null
 $lastIdleBrightness = $null
+$lastIdleBrightnessRefresh = [datetime]::MinValue
+$idleBrightnessRefreshIntervalSeconds = 30
+$processClassificationCache = @{}
 $gameBrightnessPercent = 75
 $gameTimerEnabled = $true
 $gameTimerMinutes = 30
@@ -191,6 +194,11 @@ function Set-Scheme([string]$guid) {
 
 function Test-AcPower {
     try {
+        $lineStatus = [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus
+        if ($lineStatus -eq [System.Windows.Forms.PowerLineStatus]::Online) { return $true }
+        if ($lineStatus -eq [System.Windows.Forms.PowerLineStatus]::Offline) { return $false }
+    } catch {}
+    try {
         $status = Get-CimInstance -Namespace root/WMI -ClassName BatteryStatus -ErrorAction Stop |
             Select-Object -First 1
         if ($null -ne $status) { return [bool]$status.PowerOnline }
@@ -210,6 +218,15 @@ function Get-DisplayBrightness {
         if ($null -ne $monitor) { return [int]$monitor.CurrentBrightness }
     } catch {}
     return $null
+}
+
+function Update-IdleBrightness([bool]$force = $false) {
+    if (-not $force -and ((Get-Date) - $script:lastIdleBrightnessRefresh).TotalSeconds -lt $script:idleBrightnessRefreshIntervalSeconds) {
+        return
+    }
+    $script:lastIdleBrightnessRefresh = Get-Date
+    $idleBrightness = Get-DisplayBrightness
+    if ($null -ne $idleBrightness) { $script:lastIdleBrightness = $idleBrightness }
 }
 
 function Set-DisplayBrightness([int]$percent) {
@@ -334,19 +351,43 @@ function Get-GameFolders($config) {
 
 function Find-RunningGames($folders, $excluded) {
     $matches = [Collections.Generic.List[object]]::new()
+    $seenProcessIds = [Collections.Generic.HashSet[int]]::new()
     foreach ($process in @(Get-Process)) {
         try {
             if ($process.HasExited) { continue }
-            if ($excluded -contains $process.ProcessName -or $process.ProcessName -in @('crash_reporter','crashreporter')) { continue }
-            $path = [IO.Path]::GetFullPath([string]$process.Path)
-            if (-not $path) { continue }
-            foreach ($folder in $folders) {
-                if ($path.StartsWith([string]$folder, [StringComparison]::OrdinalIgnoreCase)) {
-                    $matches.Add($process)
-                    break
+            $processId = [int]$process.Id
+            [void]$seenProcessIds.Add($processId)
+            $processName = [string]$process.ProcessName
+            $startTicks = try { [long]$process.StartTime.Ticks } catch { [long]0 }
+            $cached = $script:processClassificationCache[$processId]
+            $isGame = $false
+            if ($null -ne $cached -and $cached.ProcessName -eq $processName -and $cached.StartTicks -eq $startTicks) {
+                $isGame = [bool]$cached.IsGame
+            } else {
+                if (-not $excluded.Contains($processName)) {
+                    $path = [IO.Path]::GetFullPath([string]$process.Path)
+                    if ($path) {
+                        foreach ($folder in $folders) {
+                            if ($path.StartsWith([string]$folder, [StringComparison]::OrdinalIgnoreCase)) {
+                                $isGame = $true
+                                break
+                            }
+                        }
+                    }
+                }
+                $script:processClassificationCache[$processId] = [pscustomobject]@{
+                    ProcessName = $processName
+                    StartTicks = $startTicks
+                    IsGame = $isGame
                 }
             }
+            if ($isGame) { $matches.Add($process) }
         } catch {}
+    }
+    foreach ($cachedProcessId in @($script:processClassificationCache.Keys)) {
+        if (-not $seenProcessIds.Contains([int]$cachedProcessId)) {
+            $script:processClassificationCache.Remove($cachedProcessId)
+        }
     }
     return @($matches)
 }
@@ -358,8 +399,8 @@ function Start-Boost($gameProcesses) {
     Start-BackgroundInterface
     $script:originalGuid = Get-ActiveScheme
     if (-not $script:originalGuid) { $script:originalGuid = $balancedGuid }
+    Update-IdleBrightness $true
     $script:originalBrightness = $script:lastIdleBrightness
-    if ($null -eq $script:originalBrightness) { $script:originalBrightness = Get-DisplayBrightness }
     Save-State
     if (-not (Set-Scheme $boostGuid)) {
         Write-Log 'Boost could not activate because the dedicated power plan was unavailable'
@@ -409,7 +450,7 @@ function Stop-Boost([bool]$showSessionSummary = $false) {
     $script:originalBrightness = $null
     $script:sessionStartedAt = $null
     $script:sessionGameNames = @()
-    $script:lastIdleBrightness = Get-DisplayBrightness
+    if ($null -ne $restoreBrightness) { $script:lastIdleBrightness = $restoreBrightness }
 }
 
 try {
@@ -445,9 +486,12 @@ try {
     if ($null -ne $config.pauseGameWithEscape) {
         $script:pauseGameWithEscape = [bool]$config.pauseGameWithEscape
     }
-    $script:lastIdleBrightness = Get-DisplayBrightness
+    Update-IdleBrightness $true
     $folders = Get-GameFolders $config
-    $excluded = @($config.excludedProcesses)
+    $excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($processName in @($config.excludedProcesses) + @('crash_reporter','crashreporter')) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$processName)) { [void]$excluded.Add([string]$processName) }
+    }
     $cachedBrightnessText = if ($null -eq $script:lastIdleBrightness) { 'unavailable' } else { "$script:lastIdleBrightness%" }
     Write-Log "Watcher started in AC-only mode; cached idle brightness: $cachedBrightnessText; monitoring: $($folders -join '; ')"
 
@@ -459,8 +503,7 @@ try {
                 Write-Log 'AC power disconnected; disabling Hardware Squisher'
                 Stop-Boost $false
             }
-            $idleBrightness = Get-DisplayBrightness
-            if ($null -ne $idleBrightness) { $script:lastIdleBrightness = $idleBrightness }
+            Update-IdleBrightness
         } elseif ($running.Count -gt 0) {
             if (-not $active) { Start-Boost $running }
             elseif ((Get-ActiveScheme) -ne $boostGuid) { Set-Scheme $boostGuid | Out-Null }
@@ -469,8 +512,7 @@ try {
             }
         } else {
             if ($active) { Stop-Boost $true }
-            $idleBrightness = Get-DisplayBrightness
-            if ($null -ne $idleBrightness) { $script:lastIdleBrightness = $idleBrightness }
+            Update-IdleBrightness
         }
         if ($Once) { break }
         Start-Sleep -Seconds ([Math]::Max(2, [int]$config.pollSeconds))

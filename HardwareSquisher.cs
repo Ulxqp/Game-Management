@@ -773,7 +773,7 @@ namespace HardwareSquisher
             countdownTimer.Interval = 250;
             countdownTimer.Tick += delegate
             {
-                RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
+                if (Visible) RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
             };
             countdownTimer.Start();
 
@@ -1138,6 +1138,7 @@ namespace HardwareSquisher
                 if (enableOnStart && !IsWatcherRunning()) EnableGameBoost(false);
                 if (showForBreakOnStart) ShowForBreak();
                 else if (hideOnStart) HideAfterBreak();
+                if (Visible || File.Exists(statePath)) RefreshTemperatureMetrics();
             };
         }
 
@@ -1171,6 +1172,11 @@ namespace HardwareSquisher
 
         private void RefreshTemperatureMetrics()
         {
+            if (!Visible && !File.Exists(statePath))
+            {
+                if (File.Exists(performanceStatePath)) File.Delete(performanceStatePath);
+                return;
+            }
             float? cpuTemperature = ReadCpuTemperature();
             float? gpuTemperature = ReadGpuTemperature();
             if (cpuTemperature.HasValue)
@@ -1744,14 +1750,18 @@ namespace HardwareSquisher
                     RunPowerShell(watcherPath, false);
                     SetFooter("Restarting the Hardware Squisher watcher...");
                 }
-                bool boosted = File.Exists(statePath) || GetActiveSchemeGuid() == BoostGuid;
-                if (!boostStateKnown || boosted != previousBoostState)
+                bool stateActive = File.Exists(statePath);
+                if (!Visible)
                 {
-                    if (boosted) ResetTemperaturePeaks();
-                    previousBoostState = boosted;
-                    boostStateKnown = true;
+                    TrackBoostState(stateActive);
+                    trayIcon.Text = watcher && !stateActive ? "Hardware Squisher" : (stateActive ? "Hardware Squisher — ACTIVE" : "Hardware Squisher — paused");
+                    return;
                 }
-                string activePlan = GetActiveSchemeName();
+                string activeSchemeOutput = RunCapture("powercfg.exe", "/getactivescheme");
+                string activeSchemeGuid = GetActiveSchemeGuid(activeSchemeOutput);
+                bool boosted = stateActive || activeSchemeGuid == BoostGuid;
+                TrackBoostState(boosted);
+                string activePlan = GetActiveSchemeName(activeSchemeOutput, activeSchemeGuid);
                 string game = GetActiveGameFromLog(boosted);
                 int? brightness = GetBrightness();
                 bool startup = HasStartupEntry();
@@ -1767,7 +1777,7 @@ namespace HardwareSquisher
                 pauseButton.Enabled = watcher || boosted;
                 startupCheck.Checked = startup;
                 trayIcon.Text = watcher && !boosted ? "Hardware Squisher" : (boosted ? "Hardware Squisher — ACTIVE" : "Hardware Squisher — paused");
-                ReadRecentLog();
+                if (activityVisible) ReadRecentLog();
             }
             catch (Exception ex)
             {
@@ -1808,22 +1818,28 @@ namespace HardwareSquisher
             return false;
         }
 
-        private string GetActiveSchemeGuid()
+        private void TrackBoostState(bool boosted)
         {
-            string output = RunCapture("powercfg.exe", "/getactivescheme");
+            if (boostStateKnown && boosted == previousBoostState) return;
+            if (boosted) ResetTemperaturePeaks();
+            previousBoostState = boosted;
+            boostStateKnown = true;
+        }
+
+        private static string GetActiveSchemeGuid(string output)
+        {
             int marker = output.IndexOf("GUID:", StringComparison.OrdinalIgnoreCase);
             if (marker < 0) return string.Empty;
             string tail = output.Substring(marker + 5).Trim();
             return tail.Length >= 36 ? tail.Substring(0, 36).ToLowerInvariant() : string.Empty;
         }
 
-        private string GetActiveSchemeName()
+        private static string GetActiveSchemeName(string output, string fallbackGuid)
         {
-            string output = RunCapture("powercfg.exe", "/getactivescheme");
             int open = output.LastIndexOf('(');
             int close = output.LastIndexOf(')');
             if (open >= 0 && close > open) return output.Substring(open + 1, close - open - 1).Trim();
-            return GetActiveSchemeGuid();
+            return fallbackGuid;
         }
 
         private string RunCapture(string file, string arguments)
@@ -1987,6 +2003,7 @@ namespace HardwareSquisher
             WindowState = FormWindowState.Normal;
             Activate();
             RefreshStatus();
+            RefreshTemperatureMetrics();
         }
 
         private void ExitApplication()
