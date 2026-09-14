@@ -1,6 +1,12 @@
 # Game Management changelog
 
-## 2.0.4 — current
+## 2.0.5 — current
+
+- Adjusted the Recent activity text area to match the exact vertical span of the Open log and Diagnostics buttons.
+- Aligned the text area's top with Open log and its bottom with Diagnostics at every supported window size.
+- Kept the button sizes, Windows 98 styling, and the rest of the main interface unchanged.
+
+## 2.0.4
 
 - Fixed the existing interface reopening behind File Explorer where it looked like the EXE did nothing.
 - Reopened windows now briefly move above other windows, then return to normal non-topmost behavior.

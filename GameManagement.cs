@@ -1063,7 +1063,7 @@ namespace GameManagement
             logBox = new TextBox();
             logBox.Location = new Point(13, 22);
             logBox.Size = new Size(631, 73);
-            logBox.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            logBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             logBox.Multiline = true;
             logBox.ReadOnly = true;
             logBox.ScrollBars = ScrollBars.Vertical;
@@ -1156,7 +1156,6 @@ namespace GameManagement
                 toggleLogButton.Width = actionWidth;
                 toggleLogButton.Height = 25;
                 logBox.Width = Math.Max(220, actionLeft - logBox.Left - logGap);
-                logBox.Height = Math.Max(45, logGroup.ClientSize.Height - 38);
                 openLog.Left = actionLeft;
                 openLog.Width = actionWidth;
                 openLog.Height = 25;
@@ -1164,6 +1163,8 @@ namespace GameManagement
                 diagnostics.Top = openLog.Top + 33;
                 diagnostics.Width = actionWidth;
                 diagnostics.Height = 25;
+                logBox.Top = openLog.Top;
+                logBox.Height = diagnostics.Bottom - logBox.Top;
             };
 
             FormClosing += OnFormClosing;

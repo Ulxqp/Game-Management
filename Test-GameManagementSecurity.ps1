@@ -119,6 +119,11 @@ Add-Check 'Aligned activity toggle' (
     $appSource -match 'toggleLogButton\.Width\s*=\s*actionWidth' -and
     $appSource -match 'toggleLogButton\.Height\s*=\s*25'
 ) 'Hide activity uses the exact width, left edge, right edge, and height of Open log and Diagnostics.'
+Add-Check 'Aligned activity text area' (
+    $appSource -match 'logBox\.Anchor\s*=\s*AnchorStyles\.Top\s*\|\s*AnchorStyles\.Left\s*\|\s*AnchorStyles\.Right' -and
+    $appSource -match 'logBox\.Top\s*=\s*openLog\.Top' -and
+    $appSource -match 'logBox\.Height\s*=\s*diagnostics\.Bottom\s*-\s*logBox\.Top'
+) 'The Recent activity text area shares the Open log top edge and Diagnostics bottom edge without stretching vertically.'
 Add-Check 'Target-verified Escape control' (
     $watcher -match 'MainWindowHandle' -and
     $watcher -match 'GetForegroundWindow\(\) -ne \$targetHandle' -and
