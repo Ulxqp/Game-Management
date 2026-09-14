@@ -473,7 +473,7 @@ namespace GameManagementInstaller
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
                 key.SetValue("DisplayName", "Game Management");
-                key.SetValue("DisplayVersion", "2.0.3");
+                key.SetValue("DisplayVersion", "2.0.4");
                 key.SetValue("Publisher", "Game Management");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);

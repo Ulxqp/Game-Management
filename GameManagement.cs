@@ -1209,7 +1209,7 @@ namespace GameManagement
                         uiContext.Post(delegate
                         {
                             if (IsDisposed || stopUiSignalThread) return;
-                            if (requestedAction == 0) ShowFromTray();
+                            if (requestedAction == 0) ShowFromTray(false);
                             else if (requestedAction == 1) ShowForBreak();
                             else if (requestedAction == 2) HideAfterBreak();
                         }, null);
@@ -1224,7 +1224,7 @@ namespace GameManagement
 
         private void ShowForBreak()
         {
-            ShowFromTray();
+            ShowFromTray(true);
             TopMost = true;
             BringToFront();
             SetFooter("Break started. Break timer is running.");
@@ -2076,12 +2076,32 @@ namespace GameManagement
             ShowInTaskbar = false;
         }
 
-        private void ShowFromTray()
+        private void ShowFromTray(bool keepOnTop = false)
         {
+            bool wasTopMost = TopMost;
+            TopMost = true;
             ShowInTaskbar = true;
             Show();
             WindowState = FormWindowState.Normal;
+            BringToFront();
             Activate();
+
+            if (!keepOnTop && !wasTopMost)
+            {
+                Timer foregroundTimer = new Timer();
+                foregroundTimer.Interval = 250;
+                foregroundTimer.Tick += delegate
+                {
+                    foregroundTimer.Stop();
+                    foregroundTimer.Dispose();
+                    if (IsDisposed) return;
+                    TopMost = false;
+                    BringToFront();
+                    Activate();
+                };
+                foregroundTimer.Start();
+            }
+
             RefreshStatus();
             RefreshTemperatureMetrics();
         }

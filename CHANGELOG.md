@@ -1,6 +1,12 @@
 # Game Management changelog
 
-## 2.0.3 — current
+## 2.0.4 — current
+
+- Fixed the existing interface reopening behind File Explorer where it looked like the EXE did nothing.
+- Reopened windows now briefly move above other windows, then return to normal non-topmost behavior.
+- Break screens remain topmost for the full break as intended, while strict single-instance protection remains enabled.
+
+## 2.0.3
 
 - Fixed repeated EXE launches failing to show an interface that was started hidden in the notification area.
 - Replaced hidden-window timer polling with a dedicated signal listener that safely posts show/hide requests to the Windows UI thread.
