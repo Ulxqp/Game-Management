@@ -68,7 +68,7 @@ Add-Check 'Stable brightness capture' (
 Add-Check 'AC-only activation guard' (
     $watcher -match 'function Test-AcPower' -and
     $watcher -match 'if \(-not \$onAcPower\)' -and
-    $watcher -match 'AC power disconnected; disabling Game Management'
+    $watcher -match 'AC power disconnected; disabling \$script:activeMode management'
 ) 'Game Management cannot activate on battery and disables itself when AC is disconnected.'
 Add-Check 'Fast AC status path' (
     $watcher -match 'SystemInformation.*PowerStatus\.PowerLineStatus' -and
@@ -121,9 +121,39 @@ Add-Check 'Aligned activity toggle' (
 ) 'Hide activity uses the exact width, left edge, right edge, and height of Open log and Diagnostics.'
 Add-Check 'Aligned activity text area' (
     $appSource -match 'logBox\.Anchor\s*=\s*AnchorStyles\.Top\s*\|\s*AnchorStyles\.Left\s*\|\s*AnchorStyles\.Right' -and
+    $appSource -match 'logGroup\.Anchor\s*=\s*AnchorStyles\.Top\s*\|\s*AnchorStyles\.Left\s*\|\s*AnchorStyles\.Right' -and
     $appSource -match 'logBox\.Top\s*=\s*openLog\.Top' -and
-    $appSource -match 'logBox\.Height\s*=\s*diagnostics\.Bottom\s*-\s*logBox\.Top'
-) 'The Recent activity text area shares the Open log top edge and Diagnostics bottom edge without stretching vertically.'
+    $appSource -match 'diagnostics\.Top\s*=\s*openLog\.Top\s*\+\s*33' -and
+    $appSource -match 'logBox\.Height\s*=\s*diagnostics\.Bottom\s*-\s*logBox\.Top' -and
+    $appSource -match 'CompactExpandedHeight\s*=\s*665'
+) 'The aligned activity text area stays compact, and the section and expanded window remove the unused gray space.'
+Add-Check 'Activity hidden on startup' (
+    $appSource -match 'private bool activityVisible\s*=\s*false' -and
+    $appSource -match 'ClientSize\s*=\s*new Size\(820, 570\)' -and
+    $appSource -match 'MinimumSize\s*=\s*new Size\(720, 570\)' -and
+    $appSource -match 'logGroup\.Visible\s*=\s*false' -and
+    $appSource -match 'RetroButton\("Show activity", 92, 25\)'
+) 'Recent activity starts collapsed in the smaller window and remains available through Show activity.'
+Add-Check 'Whole-tile Game and Work flip' (
+    $appSource -match 'RetroButton\("Work mode", 108, 25\)' -and
+    $appSource -match 'modeFlipButton\.Left\s*=\s*toggleLogButton\.Left\s*-\s*modeFlipButton\.Width\s*-\s*10' -and
+    $appSource -match 'AnimateManagementModeFlip' -and
+    $appSource -match 'workSurface\.BringToFront' -and
+    $appSource -match 'gameSurface\.BringToFront'
+) 'Work mode sits immediately before Show activity and flips the complete content tile between Game and Work views.'
+Add-Check 'User-selected work applications' (
+    $appSource -match 'OpenFileDialog' -and
+    $appSource -match 'Applications \(\*\.exe\)\|\*\.exe' -and
+    $appSource -match 'settings\.workApps' -and
+    $watcher -match 'function Find-RunningWorkApps' -and
+    $watcher -match '\$selected\.Contains\(\$path\)'
+) 'Work mode monitors only executable files explicitly selected by the user and matches their exact paths.'
+Add-Check 'Work profile avoids gaming power changes' (
+    $watcher -match 'if \(\$script:activeMode -eq ''work''\)' -and
+    $watcher -match 'Work Management ON' -and
+    $watcher -match '\$script:activeMode -eq ''game'' -and \(Get-ActiveScheme\) -ne \$managementPlanGuid' -and
+    $watcher -match 'if \(\$script:activeMode -eq ''game''\) \{ Send-GameEscape'
+) 'Selected work apps receive focus timing without gaming power-plan, brightness, or Escape behavior.'
 Add-Check 'Target-verified Escape control' (
     $watcher -match 'MainWindowHandle' -and
     $watcher -match 'GetForegroundWindow\(\) -ne \$targetHandle' -and
@@ -131,13 +161,11 @@ Add-Check 'Target-verified Escape control' (
     $watcher -match 'keybd_event\(0x1B' -and
     $watcher -notmatch 'SendKeys.*ESC'
 ) 'Escape is sent only after the detected game window is selected and verified as the foreground window; there is no global fallback.'
-Add-Check 'Automatic break interface flow' (
-    $watcher -match '--break-ui-show' -and
-    $watcher -match '--break-ui-hide' -and
-    $appSource -match 'GameManagementShowBreak_v1' -and
-    $appSource -match 'ShowForBreak\(\)' -and
-    $appSource -match 'HideAfterBreak\(\)'
-) 'The main interface is signaled to show when a break starts and hide when the break ends.'
+Add-Check 'Timer dialog only at timer transitions' (
+    $watcher -match "--timer-alert', 'game-finished'" -and
+    $watcher -match "--timer-alert', 'break-finished'" -and
+    $watcher -notmatch 'Set-BreakInterface\s+\$(true|false)'
+) 'Timer transitions open only the alarm dialog and do not show or hide the main interface.'
 Add-Check 'Read-only CPU and GPU temperatures' (
     $appSource -match 'performanceTimer\.Interval\s*=\s*1000' -and
     $appSource -match 'GetCPUTemp' -and
@@ -179,6 +207,12 @@ Add-Check 'Persistent game session notes' (
     $watcher -match 'Peak GPU temperature:' -and
     $appSource -match 'class SessionSummaryForm'
 ) 'A plain-text history and visible exit summary store the game, date/time, duration, cycles, and peak CPU/GPU temperatures.'
+Add-Check 'Short sessions excluded from history' (
+    $watcher -match '\$duration\.TotalSeconds\s*-le\s*120' -and
+    $watcher -match 'Game session not saved because it lasted 2 minutes or less' -and
+    $watcher -match 'Remove-Item\s+-LiteralPath\s+\$lastSessionPath' -and
+    $watcher -match 'return'
+) 'Sessions lasting exactly two minutes or less do not update history or open a saved-session summary.'
 $installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-GameManagement.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
 $setupPath=Join-Path $PackagePath 'GameManagementSetup.cs'

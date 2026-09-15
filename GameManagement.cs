@@ -61,6 +61,7 @@ namespace GameManagement
             {
                 GameSessionSummary preview = new GameSessionSummary
                 {
+                    Mode = "game",
                     Game = "Example Game",
                     StartedAt = "2026-09-13 13:00:00",
                     EndedAt = "2026-09-13 14:15:00",
@@ -116,6 +117,11 @@ namespace GameManagement
                     }
                     form.Show();
                     Application.DoEvents();
+                    if (args.Any(argument => string.Equals(argument, "--show-activity", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        form.SetActivityVisibleForPreview(true);
+                        Application.DoEvents();
+                    }
                     if (args.Any(argument => string.Equals(argument, "--hide-activity", StringComparison.OrdinalIgnoreCase)))
                     {
                         form.SetActivityVisibleForPreview(false);
@@ -124,6 +130,11 @@ namespace GameManagement
                     if (args.Any(argument => string.Equals(argument, "--flowers", StringComparison.OrdinalIgnoreCase)))
                     {
                         form.SetFlowerPanelForPreview(true);
+                        Application.DoEvents();
+                    }
+                    if (args.Any(argument => string.Equals(argument, "--work-mode", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        form.SetWorkViewForPreview(true);
                         Application.DoEvents();
                     }
                     using (Bitmap preview = new Bitmap(form.Width, form.Height))
@@ -475,10 +486,13 @@ namespace GameManagement
         public bool pauseGameWithEscape { get; set; }
         public string[] gameFolders { get; set; }
         public string[] excludedProcesses { get; set; }
+        public string activeMode { get; set; }
+        public string[] workApps { get; set; }
     }
 
     internal sealed class GameSessionSummary
     {
+        public string Mode { get; set; }
         public string Game { get; set; }
         public string StartedAt { get; set; }
         public string EndedAt { get; set; }
@@ -500,9 +514,10 @@ namespace GameManagement
             TopMost = true;
             BuildRetroChrome("Game Management - Session saved");
 
+            bool workSession = string.Equals(summary.Mode, "work", StringComparison.OrdinalIgnoreCase);
             Label heading = new Label
             {
-                Text = "GAME SESSION FINISHED",
+                Text = workSession ? "WORK SESSION FINISHED" : "GAME SESSION FINISHED",
                 Location = new Point(20, 14),
                 Size = new Size(445, 31),
                 Font = new Font("Arial", 17F, FontStyle.Bold),
@@ -511,8 +526,8 @@ namespace GameManagement
             ContentPanel.Controls.Add(heading);
 
             string details =
-                "Game: " + Safe(summary.Game) + Environment.NewLine +
-                "Played: " + Safe(summary.DurationText) + Environment.NewLine +
+                (workSession ? "Applications: " : "Game: ") + Safe(summary.Game) + Environment.NewLine +
+                (workSession ? "Worked: " : "Played: ") + Safe(summary.DurationText) + Environment.NewLine +
                 "Timer cycles: " + summary.Cycles + Environment.NewLine +
                 "Peak CPU temp: " + Safe(summary.PeakCpu) + Environment.NewLine +
                 "Peak GPU temp: " + Safe(summary.PeakGpu) + Environment.NewLine +
@@ -705,6 +720,7 @@ namespace GameManagement
         private readonly Timer countdownTimer = new Timer();
         private readonly Timer performanceTimer = new Timer();
         private readonly Timer panelFlipTimer = new Timer();
+        private readonly Timer workspaceFlipTimer = new Timer();
         private readonly NotifyIcon trayIcon = new NotifyIcon();
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly bool enableOnStart;
@@ -757,8 +773,25 @@ namespace GameManagement
         private Button toggleLogButton;
         private Button confirmTimerButton;
         private Label footerLabel;
-        private bool activityVisible = true;
-        private int expandedClientHeight = 720;
+        private Panel gameSurface;
+        private Panel workSurface;
+        private Button modeFlipButton;
+        private Button workModeFlipButton;
+        private ListBox workAppsList;
+        private Label workModeValue;
+        private Label workAppsValue;
+        private Label workElapsedValue;
+        private Label workCpuValue;
+        private Label workGpuValue;
+        private Label workFooterLabel;
+        private bool workView;
+        private bool targetWorkView;
+        private int workspaceFlipFrame;
+        private Rectangle workspaceFlipBounds;
+        private Panel workspaceFlipSurface;
+        private bool activityVisible = false;
+        private const int CompactExpandedHeight = 665;
+        private int expandedClientHeight = CompactExpandedHeight;
         private bool showingFlowers;
         private bool panelFlipping;
         private int panelFlipFrame;
@@ -822,8 +855,8 @@ namespace GameManagement
         private void BuildWindow()
         {
             Text = "Game Management";
-            ClientSize = new Size(820, 720);
-            MinimumSize = new Size(720, 680);
+            ClientSize = new Size(820, 570);
+            MinimumSize = new Size(720, 570);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Color.FromArgb(192, 192, 192);
             Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Regular, GraphicsUnit.Point);
@@ -869,21 +902,37 @@ namespace GameManagement
             Controls.Add(body);
             body.BringToFront();
 
+            gameSurface = new Panel();
+            gameSurface.Location = Point.Empty;
+            gameSurface.Size = body.ClientSize;
+            gameSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            gameSurface.BackColor = Color.FromArgb(192, 192, 192);
+            body.Controls.Add(gameSurface);
+
+            workSurface = new Panel();
+            workSurface.Location = Point.Empty;
+            workSurface.Size = body.ClientSize;
+            workSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            workSurface.BackColor = Color.FromArgb(192, 192, 192);
+            workSurface.Visible = false;
+            body.Controls.Add(workSurface);
+            gameSurface.BringToFront();
+
             Label brand = new Label();
             brand.Text = "GAME MANAGEMENT";
             brand.Font = new Font("Arial", 26F, FontStyle.Bold);
             brand.AutoSize = true;
             brand.Location = new Point(17, 12);
-            body.Controls.Add(brand);
+            gameSurface.Controls.Add(brand);
 
             Label subtitle = new Label();
             subtitle.Text = "Automatic game management and break controller";
             subtitle.AutoSize = true;
             subtitle.Location = new Point(21, 53);
-            body.Controls.Add(subtitle);
+            gameSurface.Controls.Add(subtitle);
 
             statusGroup = RetroGroup("Current status", 20, 82, 375, 248);
-            body.Controls.Add(statusGroup);
+            gameSurface.Controls.Add(statusGroup);
 
             statusSurface = new Panel();
             statusSurface.Location = new Point(3, 15);
@@ -939,20 +988,20 @@ namespace GameManagement
             enableButton = RetroButton("Enable", 92, 26);
             enableButton.Location = new Point(418, 93);
             enableButton.Click += delegate { EnableGameManagement(); };
-            body.Controls.Add(enableButton);
+            gameSurface.Controls.Add(enableButton);
 
             pauseButton = RetroButton("Pause", 92, 26);
             pauseButton.Location = new Point(520, 93);
             pauseButton.Click += delegate { PauseGameManagement(); };
-            body.Controls.Add(pauseButton);
+            gameSurface.Controls.Add(pauseButton);
 
             Button refreshButton = RetroButton("Refresh", 92, 26);
             refreshButton.Location = new Point(622, 93);
             refreshButton.Click += delegate { RefreshStatus(); };
-            body.Controls.Add(refreshButton);
+            gameSurface.Controls.Add(refreshButton);
 
             GroupBox settingsGroup = RetroGroup("Settings", 414, 132, 370, 184);
-            body.Controls.Add(settingsGroup);
+            gameSurface.Controls.Add(settingsGroup);
             Label brightnessLabel = MakeLabel("Gaming brightness:", 16, 28);
             settingsGroup.Controls.Add(brightnessLabel);
             brightnessInput = new NumericUpDown();
@@ -1031,7 +1080,7 @@ namespace GameManagement
 
             GroupBox foldersGroup = RetroGroup("Game library folders", 20, 330, 764, 142);
             foldersGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            body.Controls.Add(foldersGroup);
+            gameSurface.Controls.Add(foldersGroup);
             foldersList = new ListBox();
             foldersList.Location = new Point(13, 23);
             foldersList.Size = new Size(628, 95);
@@ -1057,9 +1106,10 @@ namespace GameManagement
             saveButton.Click += delegate { SaveSettings(); };
             foldersGroup.Controls.Add(saveButton);
 
-            logGroup = RetroGroup("Recent activity", 20, 484, 764, 111);
-            logGroup.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            body.Controls.Add(logGroup);
+            logGroup = RetroGroup("Recent activity", 20, 484, 764, 95);
+            logGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            logGroup.Visible = false;
+            gameSurface.Controls.Add(logGroup);
             logBox = new TextBox();
             logBox.Location = new Point(13, 22);
             logBox.Size = new Size(631, 73);
@@ -1089,12 +1139,12 @@ namespace GameManagement
             trayCheck.AutoSize = true;
             trayCheck.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             trayCheck.Location = new Point(22, 558);
-            body.Controls.Add(trayCheck);
+            gameSurface.Controls.Add(trayCheck);
 
-            toggleLogButton = RetroButton("Hide activity", 92, 25);
+            toggleLogButton = RetroButton("Show activity", 92, 25);
             toggleLogButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             toggleLogButton.Click += delegate { ToggleActivity(); };
-            body.Controls.Add(toggleLogButton);
+            gameSurface.Controls.Add(toggleLogButton);
 
             footerLabel = new Label();
             footerLabel.Text = "Ready.";
@@ -1103,7 +1153,18 @@ namespace GameManagement
             footerLabel.Location = new Point(20, 582);
             footerLabel.Size = new Size(764, 20);
             footerLabel.TextAlign = ContentAlignment.MiddleLeft;
-            body.Controls.Add(footerLabel);
+            gameSurface.Controls.Add(footerLabel);
+
+            BuildWorkSurface();
+
+            modeFlipButton = RetroButton("Work mode", 108, 25);
+            modeFlipButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            modeFlipButton.Click += delegate { FlipManagementMode(); };
+            gameSurface.Controls.Add(modeFlipButton);
+            modeFlipButton.BringToFront();
+
+            workspaceFlipTimer.Interval = 15;
+            workspaceFlipTimer.Tick += delegate { AnimateManagementModeFlip(); };
 
             body.Resize += delegate
             {
@@ -1146,7 +1207,6 @@ namespace GameManagement
                 footerLabel.Width = contentWidth;
                 trayCheck.Top = footerLabel.Top - trayCheck.Height - 4;
                 toggleLogButton.Top = trayCheck.Top - 4;
-                logGroup.Height = Math.Max(82, trayCheck.Top - logGroup.Top - 8);
 
                 int logPadding = 13;
                 int logGap = 10;
@@ -1155,14 +1215,16 @@ namespace GameManagement
                 toggleLogButton.Left = logGroup.Left + actionLeft;
                 toggleLogButton.Width = actionWidth;
                 toggleLogButton.Height = 25;
+                modeFlipButton.Left = toggleLogButton.Left - modeFlipButton.Width - 10;
+                modeFlipButton.Top = toggleLogButton.Top;
                 logBox.Width = Math.Max(220, actionLeft - logBox.Left - logGap);
                 openLog.Left = actionLeft;
                 openLog.Width = actionWidth;
                 openLog.Height = 25;
                 diagnostics.Left = actionLeft;
-                diagnostics.Top = openLog.Top + 33;
                 diagnostics.Width = actionWidth;
                 diagnostics.Height = 25;
+                diagnostics.Top = openLog.Top + 33;
                 logBox.Top = openLog.Top;
                 logBox.Height = diagnostics.Bottom - logBox.Top;
             };
@@ -1177,6 +1239,249 @@ namespace GameManagement
                 else if (hideOnStart) BeginInvoke(new MethodInvoker(HideAfterBreak));
                 if (Visible || File.Exists(statePath)) RefreshTemperatureMetrics();
             };
+        }
+
+        private void BuildWorkSurface()
+        {
+            Label brand = new Label();
+            brand.Text = "WORK MANAGEMENT";
+            brand.Font = new Font("Arial", 26F, FontStyle.Bold);
+            brand.AutoSize = true;
+            brand.Location = new Point(17, 12);
+            workSurface.Controls.Add(brand);
+
+            Label subtitle = new Label();
+            subtitle.Text = "Selected-app focus sessions and break controller";
+            subtitle.AutoSize = true;
+            subtitle.Location = new Point(21, 53);
+            workSurface.Controls.Add(subtitle);
+
+            GroupBox status = RetroGroup("Current work", 20, 82, 764, 148);
+            status.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            workSurface.Controls.Add(status);
+            Panel statusPanel = new Panel();
+            statusPanel.Location = new Point(3, 15);
+            statusPanel.Size = new Size(status.ClientSize.Width - 6, status.ClientSize.Height - 18);
+            statusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            statusPanel.BackColor = Color.FromArgb(192, 192, 192);
+            status.Controls.Add(statusPanel);
+            AddValueRow(statusPanel, "Mode:", 12, out workModeValue);
+            AddValueRow(statusPanel, "Detected apps:", 34, out workAppsValue);
+            AddValueRow(statusPanel, "Session time:", 56, out workElapsedValue);
+            AddValueRow(statusPanel, "CPU temp:", 78, out workCpuValue);
+            AddValueRow(statusPanel, "GPU temp:", 100, out workGpuValue);
+
+            GroupBox apps = RetroGroup("Selected work applications", 20, 244, 764, 222);
+            apps.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            workSurface.Controls.Add(apps);
+            workAppsList = new ListBox();
+            workAppsList.Location = new Point(13, 23);
+            workAppsList.Size = new Size(628, 154);
+            workAppsList.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            workAppsList.HorizontalScrollbar = true;
+            apps.Controls.Add(workAppsList);
+
+            Button add = RetroButton("Add app...", 92, 25);
+            add.Location = new Point(654, 23);
+            add.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            add.Click += delegate { AddWorkApplication(); };
+            apps.Controls.Add(add);
+
+            Button remove = RetroButton("Remove", 92, 25);
+            remove.Location = new Point(654, 56);
+            remove.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            remove.Click += delegate { RemoveWorkApplication(); };
+            apps.Controls.Add(remove);
+
+            Button save = RetroButton("Save apps", 92, 25);
+            save.Location = new Point(654, 89);
+            save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            save.Click += delegate { SaveWorkApplications(); };
+            apps.Controls.Add(save);
+
+            Label note = MakeLabel("Only the exact .exe files selected here start Work Management. Gaming power and brightness settings are not used.", 13, 190);
+            note.AutoSize = false;
+            note.Size = new Size(733, 18);
+            note.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            apps.Controls.Add(note);
+
+            workFooterLabel = new Label();
+            workFooterLabel.Text = "Choose Add app... to select a work application.";
+            workFooterLabel.BorderStyle = BorderStyle.Fixed3D;
+            workFooterLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            workFooterLabel.Location = new Point(20, 515);
+            workFooterLabel.Size = new Size(764, 20);
+            workFooterLabel.TextAlign = ContentAlignment.MiddleLeft;
+            workSurface.Controls.Add(workFooterLabel);
+
+            workModeFlipButton = RetroButton("Game mode", 108, 25);
+            workModeFlipButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            workModeFlipButton.Click += delegate { FlipManagementMode(); };
+            workSurface.Controls.Add(workModeFlipButton);
+            workModeFlipButton.BringToFront();
+
+            workSurface.Resize += delegate
+            {
+                int contentMargin = 20;
+                int contentWidth = Math.Max(640, workSurface.ClientSize.Width - (contentMargin * 2));
+                status.Width = contentWidth;
+                apps.Width = contentWidth;
+                int padding = 13;
+                int gap = 10;
+                int actionWidth = Math.Max(92, Math.Min(130, apps.ClientSize.Width / 7));
+                int actionLeft = apps.ClientSize.Width - padding - actionWidth;
+                workAppsList.Width = Math.Max(220, actionLeft - workAppsList.Left - gap);
+                add.Left = actionLeft;
+                add.Width = actionWidth;
+                remove.Left = actionLeft;
+                remove.Width = actionWidth;
+                save.Left = actionLeft;
+                save.Width = actionWidth;
+                note.Width = apps.ClientSize.Width - (padding * 2);
+                workFooterLabel.Top = workSurface.ClientSize.Height - workFooterLabel.Height - 7;
+                workFooterLabel.Width = contentWidth;
+                workModeFlipButton.Left = workSurface.ClientSize.Width - contentMargin - workModeFlipButton.Width;
+                workModeFlipButton.Top = workFooterLabel.Top - workModeFlipButton.Height - 4;
+            };
+        }
+
+        private void AddWorkApplication()
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Choose a work application";
+                dialog.Filter = "Applications (*.exe)|*.exe";
+                dialog.Multiselect = true;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                foreach (string path in dialog.FileNames)
+                {
+                    bool exists = workAppsList.Items.Cast<object>().Any(item => string.Equals(item.ToString(), path, StringComparison.OrdinalIgnoreCase));
+                    if (!exists) workAppsList.Items.Add(path);
+                }
+                workFooterLabel.Text = "Selection changed. Choose Save apps to apply it.";
+            }
+        }
+
+        private void RemoveWorkApplication()
+        {
+            while (workAppsList.SelectedIndices.Count > 0)
+                workAppsList.Items.RemoveAt(workAppsList.SelectedIndices[0]);
+            workFooterLabel.Text = "Selection changed. Choose Save apps to apply it.";
+        }
+
+        private void SaveWorkApplications()
+        {
+            if (SaveSettings()) workFooterLabel.Text = "Work applications saved. Monitoring restarted if needed.";
+        }
+
+        private void FlipManagementMode()
+        {
+            if (workspaceFlipTimer.Enabled) return;
+            targetWorkView = !workView;
+            workspaceFlipFrame = 0;
+            workspaceFlipSurface = workView ? workSurface : gameSurface;
+            workspaceFlipBounds = workspaceFlipSurface.Bounds;
+            workspaceFlipSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
+            modeFlipButton.Enabled = false;
+            workModeFlipButton.Enabled = false;
+            workspaceFlipTimer.Start();
+        }
+
+        private void AnimateManagementModeFlip()
+        {
+            const int totalFrames = 18;
+            const int half = totalFrames / 2;
+            workspaceFlipFrame++;
+            if (workspaceFlipFrame <= half)
+            {
+                double progress = workspaceFlipFrame / (double)half;
+                int width = Math.Max(2, (int)Math.Round(workspaceFlipBounds.Width * Math.Cos(progress * Math.PI / 2.0)));
+                workspaceFlipSurface.SetBounds(workspaceFlipBounds.Left + (workspaceFlipBounds.Width - width) / 2, workspaceFlipBounds.Top, width, workspaceFlipBounds.Height);
+                if (workspaceFlipFrame < half) return;
+                workspaceFlipSurface.Visible = false;
+                workView = targetWorkView;
+                workspaceFlipSurface = workView ? workSurface : gameSurface;
+                workspaceFlipSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
+                workspaceFlipSurface.SetBounds(workspaceFlipBounds.Left + workspaceFlipBounds.Width / 2, workspaceFlipBounds.Top, 2, workspaceFlipBounds.Height);
+                workspaceFlipSurface.Visible = true;
+                workspaceFlipSurface.BringToFront();
+                return;
+            }
+
+            double expansion = (workspaceFlipFrame - half) / (double)half;
+            int expandedWidth = Math.Max(2, (int)Math.Round(workspaceFlipBounds.Width * Math.Sin(expansion * Math.PI / 2.0)));
+            workspaceFlipSurface.SetBounds(workspaceFlipBounds.Left + (workspaceFlipBounds.Width - expandedWidth) / 2, workspaceFlipBounds.Top, expandedWidth, workspaceFlipBounds.Height);
+            if (workspaceFlipFrame < totalFrames) return;
+            workspaceFlipTimer.Stop();
+            workspaceFlipSurface.Bounds = workspaceFlipBounds;
+            workspaceFlipSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            modeFlipButton.Enabled = true;
+            workModeFlipButton.Enabled = true;
+            SaveSettings();
+            if (workView) RefreshWorkStatus();
+        }
+
+        private void ShowManagementMode(bool showWork)
+        {
+            workView = showWork;
+            gameSurface.Visible = !showWork;
+            workSurface.Visible = showWork;
+            if (showWork) workSurface.BringToFront(); else gameSurface.BringToFront();
+        }
+
+        private string[] GetRunningSelectedWorkApps()
+        {
+            if (settings == null || settings.workApps == null) return new string[0];
+            HashSet<string> selected = new HashSet<string>(settings.workApps.Where(File.Exists), StringComparer.OrdinalIgnoreCase);
+            HashSet<string> running = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Process process in Process.GetProcesses())
+            {
+                try
+                {
+                    string path = process.MainModule.FileName;
+                    if (selected.Contains(path)) running.Add(Path.GetFileNameWithoutExtension(path));
+                }
+                catch { }
+                finally { process.Dispose(); }
+            }
+            return running.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        private void RefreshWorkStatus()
+        {
+            if (!workView || settings == null) return;
+            string[] running = GetRunningSelectedWorkApps();
+            workModeValue.Text = running.Length > 0 ? "WORK ACTIVE" : "Ready / monitoring";
+            workModeValue.ForeColor = running.Length > 0 ? Color.Green : Color.Black;
+            SetLabelText(workAppsValue, running.Length > 0 ? string.Join(", ", running) : "None");
+            workElapsedValue.Text = "Ready";
+            try
+            {
+                if (File.Exists(statePath))
+                {
+                    Dictionary<string, object> state = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(statePath));
+                    object mode;
+                    object started;
+                    if (state.TryGetValue("Mode", out mode) && string.Equals(Convert.ToString(mode), "work", StringComparison.OrdinalIgnoreCase) && state.TryGetValue("ManagementStarted", out started))
+                    {
+                        DateTime began;
+                        if (DateTime.TryParse(Convert.ToString(started), out began))
+                            workElapsedValue.Text = FormatElapsed(DateTime.Now - began);
+                    }
+                }
+            }
+            catch { }
+            workCpuValue.Text = cpuTemperatureValue == null ? "Unavailable" : cpuTemperatureValue.Text;
+            workCpuValue.ForeColor = cpuTemperatureValue == null ? Color.DimGray : cpuTemperatureValue.ForeColor;
+            workGpuValue.Text = gpuTemperatureValue == null ? "Unavailable" : gpuTemperatureValue.Text;
+            workGpuValue.ForeColor = gpuTemperatureValue == null ? Color.DimGray : gpuTemperatureValue.ForeColor;
+        }
+
+        private static string FormatElapsed(TimeSpan elapsed)
+        {
+            if (elapsed.TotalHours >= 1) return ((int)elapsed.TotalHours) + " hr " + elapsed.Minutes + " min";
+            if (elapsed.TotalMinutes >= 1) return ((int)elapsed.TotalMinutes) + " min " + elapsed.Seconds + " sec";
+            return Math.Max(0, (int)elapsed.TotalSeconds) + " sec";
         }
 
         private void InitializeUiSignals()
@@ -1463,7 +1768,7 @@ namespace GameManagement
         {
             if (activityVisible)
             {
-                expandedClientHeight = Math.Max(720, ClientSize.Height);
+                expandedClientHeight = Math.Max(CompactExpandedHeight, ClientSize.Height);
                 activityVisible = false;
                 logGroup.Visible = false;
                 toggleLogButton.Text = "Show activity";
@@ -1476,8 +1781,8 @@ namespace GameManagement
                 activityVisible = true;
                 logGroup.Visible = true;
                 toggleLogButton.Text = "Hide activity";
-                MinimumSize = new Size(720, 680);
-                ClientSize = new Size(ClientSize.Width, Math.Max(720, expandedClientHeight));
+                MinimumSize = new Size(720, CompactExpandedHeight);
+                ClientSize = new Size(ClientSize.Width, Math.Max(CompactExpandedHeight, expandedClientHeight));
                 SetFooter("Recent activity shown.");
             }
         }
@@ -1490,6 +1795,12 @@ namespace GameManagement
         internal void SetFlowerPanelForPreview(bool visible)
         {
             ShowFlowerPanel(visible);
+        }
+
+        internal void SetWorkViewForPreview(bool visible)
+        {
+            ShowManagementMode(visible);
+            if (visible) RefreshWorkStatus();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -1597,12 +1908,16 @@ namespace GameManagement
                     breakTimerMinutes = 5,
                     pauseGameWithEscape = true,
                     gameFolders = new string[0],
-                    excludedProcesses = new string[0]
+                    excludedProcesses = new string[0],
+                    activeMode = "game",
+                    workApps = new string[0]
                 };
             }
 
             if (settings.gameFolders == null) settings.gameFolders = new string[0];
             if (settings.excludedProcesses == null) settings.excludedProcesses = new string[0];
+            if (settings.workApps == null) settings.workApps = new string[0];
+            if (!string.Equals(settings.activeMode, "work", StringComparison.OrdinalIgnoreCase)) settings.activeMode = "game";
             if (settings.gameTimerMinutes < 1) settings.gameTimerMinutes = 30;
             if (settings.breakTimerMinutes < 1) settings.breakTimerMinutes = 5;
             brightnessInput.Value = Math.Max(brightnessInput.Minimum, Math.Min(brightnessInput.Maximum, settings.gameBrightnessPercent));
@@ -1615,6 +1930,9 @@ namespace GameManagement
             pauseWithEscapeCheck.Checked = settings.pauseGameWithEscape;
             foldersList.Items.Clear();
             foreach (string folder in settings.gameFolders) foldersList.Items.Add(folder);
+            workAppsList.Items.Clear();
+            foreach (string app in settings.workApps) workAppsList.Items.Add(app);
+            ShowManagementMode(string.Equals(settings.activeMode, "work", StringComparison.OrdinalIgnoreCase));
             UpdateTimerConfirmState();
         }
 
@@ -1629,6 +1947,8 @@ namespace GameManagement
                 settings.breakTimerMinutes = (int)breakMinutesInput.Value;
                 settings.pauseGameWithEscape = pauseWithEscapeCheck.Checked;
                 settings.gameFolders = foldersList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
+                settings.activeMode = workView ? "work" : "game";
+                settings.workApps = workAppsList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
                 string serialized = json.Serialize(settings);
                 File.WriteAllText(settingsPath, PrettyJson(serialized), new UTF8Encoding(false));
                 bool wasRunning = IsWatcherRunning();
@@ -1858,6 +2178,7 @@ namespace GameManagement
                 pauseButton.Enabled = watcher || managed;
                 startupCheck.Checked = startup;
                 trayIcon.Text = watcher && !managed ? "Game Management" : (managed ? "Game Management — ACTIVE" : "Game Management — paused");
+                if (workView) RefreshWorkStatus();
                 if (activityVisible) ReadRecentLog();
             }
             catch (Exception ex)

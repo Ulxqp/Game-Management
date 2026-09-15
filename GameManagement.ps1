@@ -1,4 +1,4 @@
-param([switch]$Once, [string]$ConfigPath)
+param([switch]$Once, [string]$ConfigPath, [string]$MutexName = 'Local\GameManagementWatcher_v1')
 
 $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -29,6 +29,7 @@ $timerAlerted = $false
 $timerCycle = 1
 $sessionStartedAt = $null
 $sessionGameNames = @()
+$activeMode = 'game'
 $mutex = $null
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -85,6 +86,11 @@ function Write-GameSessionSummary {
     }
     if ($null -eq $startedAt) { $startedAt = $endedAt }
     $duration = $endedAt - $startedAt
+    if ($duration.TotalSeconds -le 120) {
+        Remove-Item -LiteralPath $lastSessionPath -Force -ErrorAction SilentlyContinue
+        Write-Log "Game session not saved because it lasted 2 minutes or less ($(Format-SessionDuration $duration))"
+        return
+    }
     $gameName = if (@($script:sessionGameNames).Count) { @($script:sessionGameNames) -join ', ' } else { 'Detected game' }
     $cycles = if ($script:gameTimerEnabled) { [Math]::Max(1, [int]$script:timerCycle) } else { 0 }
     $peakCpu = $null
@@ -100,6 +106,7 @@ function Write-GameSessionSummary {
     $peakCpuText = if ($null -eq $peakCpu) { 'Unavailable' } else { "$([Math]::Round($peakCpu, 1))$degreeC" }
     $peakGpuText = if ($null -eq $peakGpu) { 'Unavailable' } else { "$([Math]::Round($peakGpu, 1))$degreeC" }
     $summary = [ordered]@{
+        Mode = $script:activeMode
         Game = $gameName
         StartedAt = $startedAt.ToString('yyyy-MM-dd HH:mm:ss')
         EndedAt = $endedAt.ToString('yyyy-MM-dd HH:mm:ss')
@@ -113,7 +120,8 @@ function Write-GameSessionSummary {
     @(
         '------------------------------------------------------------'
         "Date: $($endedAt.ToString('yyyy-MM-dd'))"
-        "Game: $gameName"
+        "Mode: $script:activeMode"
+        "Applications: $gameName"
         "Started: $($startedAt.ToString('yyyy-MM-dd HH:mm:ss'))"
         "Finished: $($endedAt.ToString('yyyy-MM-dd HH:mm:ss'))"
         "Total game time: $(Format-SessionDuration $duration) ($([Math]::Round($duration.TotalHours, 3)) hours)"
@@ -121,7 +129,7 @@ function Write-GameSessionSummary {
         "Peak CPU temperature: $peakCpuText"
         "Peak GPU temperature: $peakGpuText"
     ) | Add-Content -LiteralPath $sessionHistoryPath -Encoding UTF8
-    Write-Log "Game session saved for $gameName; duration $(Format-SessionDuration $duration); cycles $cycles; peak CPU temperature $peakCpuText; peak GPU temperature $peakGpuText"
+    Write-Log "$script:activeMode session saved for $gameName; duration $(Format-SessionDuration $duration); cycles $cycles; peak CPU temperature $peakCpuText; peak GPU temperature $peakGpuText"
     $app = Join-Path $root 'GameManagement.exe'
     if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app -ArgumentList '--session-summary' }
 }
@@ -252,6 +260,8 @@ function Save-State {
         OriginalPowerScheme = $script:originalGuid
         OriginalBrightness = $script:originalBrightness
         ManagementStarted = (Get-Date).ToString('o')
+        Mode = $script:activeMode
+        Applications = @($script:sessionGameNames)
     } |
         ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
@@ -293,8 +303,7 @@ function Update-GameTimer($gameProcesses) {
         $script:timerDeadline = (Get-Date).AddMinutes($script:breakTimerMinutes)
         $script:timerAlerted = $false
         Save-GameTimerState
-        Send-GameEscape $gameProcesses 'break start' | Out-Null
-        Set-BreakInterface $true
+        if ($script:activeMode -eq 'game') { Send-GameEscape $gameProcesses 'break start' | Out-Null }
         if (Test-Path -LiteralPath $alertApp) {
             Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', 'game-finished', [string]$script:gameTimerMinutes, [string]$script:breakTimerMinutes)
         } else {
@@ -307,8 +316,7 @@ function Update-GameTimer($gameProcesses) {
         $script:timerDeadline = (Get-Date).AddMinutes($script:gameTimerMinutes)
         $script:timerAlerted = $false
         Save-GameTimerState
-        Send-GameEscape $gameProcesses 'break end' | Out-Null
-        Set-BreakInterface $false
+        if ($script:activeMode -eq 'game') { Send-GameEscape $gameProcesses 'break end' | Out-Null }
         if (Test-Path -LiteralPath $alertApp) {
             Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', 'break-finished', [string]$script:breakTimerMinutes, [string]$script:gameTimerMinutes)
         } else {
@@ -392,6 +400,27 @@ function Find-RunningGames($folders, $excluded) {
     return @($matches)
 }
 
+function Find-RunningWorkApps($selectedPaths) {
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($selectedPath in @($selectedPaths)) {
+        try {
+            $fullPath = [IO.Path]::GetFullPath([string]$selectedPath)
+            if (Test-Path -LiteralPath $fullPath -PathType Leaf) { [void]$selected.Add($fullPath) }
+        } catch {}
+    }
+    if ($selected.Count -eq 0) { return @() }
+
+    $matches = [Collections.Generic.List[object]]::new()
+    foreach ($process in @(Get-Process)) {
+        try {
+            if ($process.HasExited) { continue }
+            $path = [IO.Path]::GetFullPath([string]$process.Path)
+            if ($selected.Contains($path)) { $matches.Add($process) }
+        } catch {}
+    }
+    return @($matches)
+}
+
 function Start-Management($gameProcesses) {
     $script:sessionStartedAt = Get-Date
     $script:sessionGameNames = @($gameProcesses.ProcessName | Sort-Object -Unique)
@@ -402,6 +431,12 @@ function Start-Management($gameProcesses) {
     Update-IdleBrightness $true
     $script:originalBrightness = $script:lastIdleBrightness
     Save-State
+    if ($script:activeMode -eq 'work') {
+        $script:active = $true
+        Start-GameTimer
+        Write-Log "Work Management ON; applications: $($gameProcesses.ProcessName -join ', ')"
+        return
+    }
     if (-not (Set-Scheme $managementPlanGuid)) {
         Write-Log 'Game Management could not activate because the dedicated power plan was unavailable'
         Clear-State
@@ -434,15 +469,18 @@ function Stop-Management([bool]$showSessionSummary = $false) {
     if ($null -eq $restoreBrightness -and $savedState -and $null -ne $savedState.OriginalBrightness) {
         $restoreBrightness = [int]$savedState.OriginalBrightness
     }
-    if (-not $restoreGuid) { $restoreGuid = $balancedGuid }
-    if (Set-Scheme $restoreGuid) { Write-Log "Game Management OFF; restored plan $restoreGuid" }
-    else { Write-Log "Game Management OFF but restoring plan $restoreGuid failed" }
-    if ($null -ne $restoreBrightness) {
-        if (Set-DisplayBrightness $restoreBrightness) { Write-Log "Brightness restored to $restoreBrightness%" }
-        else { Write-Log "Brightness restoration to $restoreBrightness% failed" }
+    if ($script:activeMode -eq 'work') {
+        Write-Log 'Work Management OFF; selected applications closed'
+    } else {
+        if (-not $restoreGuid) { $restoreGuid = $balancedGuid }
+        if (Set-Scheme $restoreGuid) { Write-Log "Game Management OFF; restored plan $restoreGuid" }
+        else { Write-Log "Game Management OFF but restoring plan $restoreGuid failed" }
+        if ($null -ne $restoreBrightness) {
+            if (Set-DisplayBrightness $restoreBrightness) { Write-Log "Brightness restored to $restoreBrightness%" }
+            else { Write-Log "Brightness restoration to $restoreBrightness% failed" }
+        }
     }
     if ($showSessionSummary) { Write-GameSessionSummary }
-    if ($script:timerPhase -eq 'Break') { Set-BreakInterface $false }
     Clear-State
     Clear-GameTimer
     $script:active = $false
@@ -455,7 +493,7 @@ function Stop-Management([bool]$showSessionSummary = $false) {
 
 try {
     $createdNew = $false
-    $mutex = [Threading.Mutex]::new($true, 'Local\GameManagementWatcher_v1', [ref]$createdNew)
+    $mutex = [Threading.Mutex]::new($true, $MutexName, [ref]$createdNew)
     if (-not $createdNew) { exit 0 }
 
     if (Test-Path -LiteralPath $statePath) {
@@ -486,6 +524,7 @@ try {
     if ($null -ne $config.pauseGameWithEscape) {
         $script:pauseGameWithEscape = [bool]$config.pauseGameWithEscape
     }
+    if ([string]$config.activeMode -eq 'work') { $script:activeMode = 'work' }
     Update-IdleBrightness $true
     $folders = Get-GameFolders $config
     $excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -493,20 +532,22 @@ try {
         if (-not [string]::IsNullOrWhiteSpace([string]$processName)) { [void]$excluded.Add([string]$processName) }
     }
     $cachedBrightnessText = if ($null -eq $script:lastIdleBrightness) { 'unavailable' } else { "$script:lastIdleBrightness%" }
-    Write-Log "Watcher started in AC-only mode; cached idle brightness: $cachedBrightnessText; monitoring: $($folders -join '; ')"
+    $workApps = @($config.workApps)
+    $monitoringText = if ($script:activeMode -eq 'work') { $workApps -join '; ' } else { $folders -join '; ' }
+    Write-Log "Watcher started in AC-only $script:activeMode mode; cached idle brightness: $cachedBrightnessText; monitoring: $monitoringText"
 
     do {
-        $running = Find-RunningGames $folders $excluded
+        $running = if ($script:activeMode -eq 'work') { Find-RunningWorkApps $workApps } else { Find-RunningGames $folders $excluded }
         $onAcPower = Test-AcPower
         if (-not $onAcPower) {
             if ($active) {
-                Write-Log 'AC power disconnected; disabling Game Management'
+                Write-Log "AC power disconnected; disabling $script:activeMode management"
                 Stop-Management $false
             }
             Update-IdleBrightness
         } elseif ($running.Count -gt 0) {
             if (-not $active) { Start-Management $running }
-            elseif ((Get-ActiveScheme) -ne $managementPlanGuid) { Set-Scheme $managementPlanGuid | Out-Null }
+            elseif ($script:activeMode -eq 'game' -and (Get-ActiveScheme) -ne $managementPlanGuid) { Set-Scheme $managementPlanGuid | Out-Null }
             if ($active) {
                 Update-GameTimer $running
             }

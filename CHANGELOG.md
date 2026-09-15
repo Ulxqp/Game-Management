@@ -1,6 +1,39 @@
 # Game Management changelog
 
-## 2.0.5 — current
+## 2.1.0 — current
+
+- Added a whole-interface flip between Game Management and Work Management.
+- Placed the Work mode button immediately before Show activity.
+- Added an executable picker so only user-selected work apps are monitored.
+- Selected work apps use the focus and break timer while leaving gaming power, brightness, and Escape behavior off.
+- Work sessions use the existing two-minute history cutoff and record the selected applications and timer cycles.
+
+## 2.0.9
+
+- Made Recent activity hidden by default whenever Game Management starts.
+- The app now starts in its smaller window with a Show activity button.
+- Kept the activity panel available on demand without changing its contents or controls.
+- Changed timer completion so only the alarm dialog appears; the main window is no longer shown behind it.
+
+## 2.0.8
+
+- Stopped game sessions lasting exactly two minutes or less from being saved in `GameSessionHistory.txt`.
+- Short sessions no longer create or open a session summary when the game closes.
+- Added a simple log message explaining when a short session was skipped.
+
+## 2.0.7
+
+- Kept the Recent activity text area at its smaller, button-aligned height.
+- Shrunk the Recent activity section and the expanded window to remove the leftover gray space below it.
+- Kept the Windows 98 styling and all Game Management behavior unchanged.
+
+## 2.0.6
+
+- Removed the unused empty space below Recent activity by letting the text area fill the available group height.
+- Kept Open log aligned with the text area's top and aligned Diagnostics with its bottom.
+- Kept the group size, overall window size, Windows 98 styling, and all other controls unchanged.
+
+## 2.0.5
 
 - Adjusted the Recent activity text area to match the exact vertical span of the Open log and Diagnostics buttons.
 - Aligned the text area's top with Open log and its bottom with Diagnostics at every supported window size.

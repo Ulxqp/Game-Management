@@ -1,8 +1,9 @@
 GAME MANAGEMENT
 =================
 
-Game Management is a Windows desktop and notification-area Game Management
-controller. Its data remains in Documents\GameManagement for upgrade compatibility.
+Game Management is a Windows 98-style desktop and notification-area controller
+for automatic game performance sessions and user-selected work focus sessions.
+Its data remains in Documents\GameManagement for upgrade compatibility.
 
 RUN
 ---
@@ -100,3 +101,10 @@ GameManagement.cs               Source code
 GameManagement.ico              Application, taskbar, and notification-area icon
 GameManagement.ps1              Background controller
 Pause-GameManagement.ps1        Safe pause/restoration helper
+WORK MODE
+
+Choose Work mode beside Show activity to flip the complete interface. Add the
+exact .exe files you want Work Management to monitor, such as Code.exe,
+eclipse.exe, or chrome.exe, then choose Save apps. Selected work apps use the
+focus and break timer but do not activate gaming power, brightness, or Escape
+behavior. Choose Game mode to flip back.

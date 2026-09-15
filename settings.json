@@ -5,6 +5,8 @@
   "gameTimerMinutes": 30,
   "breakTimerMinutes": 5,
   "pauseGameWithEscape": true,
+  "activeMode": "game",
+  "workApps": [],
   "gameFolders": [
     "C:\\Program Files (x86)\\Steam\\steamapps\\common"
   ],
