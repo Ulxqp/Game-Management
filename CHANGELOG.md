@@ -1,6 +1,28 @@
 # Game Management changelog
 
-## 2.1.0 — current
+## 2.3.1 — 2026-09-27
+
+- Switching between Work and Game now asks the outgoing watcher to finish and save its active session before the new mode starts. A failed handoff keeps the old mode and settings.
+- Each screen reads only its own timer and runtime mode; a Work session can no longer make the Game tile appear active.
+- Intentional mode switches save eligible sessions without opening the end-of-session dialog. The two-minute history cutoff still applies.
+
+## 2.3.0 — 2026-09-27
+
+- Added independent Work focus and break timer settings with a separate Work timer state file. The Game timer settings and state remain unchanged.
+- Added an installed-application picker using Windows App Paths and Start Menu shortcuts, with names and icons where available. It omits obvious system/helper entries and shortcuts that require launch arguments. Manual executable browsing remains available.
+- Added a Launch selected button for configured Work apps, with missing-file handling.
+- Added a Weekly Report on both mode screens. It totals saved Game and Work sessions separately, splits sessions across midnight and week boundaries, and attributes time to individual apps only when a session lists one app.
+- Older history entries without a Mode field remain readable as Game sessions. Existing application paths and settings are preserved on upgrade.
+
+## 2.2.0 — 2026-09-23
+
+- Changed the existing per-user Windows sign-in entry to launch the single-instance Game Management application in its established hidden/tray mode, which then starts the watcher normally.
+- Kept automatic startup configurable through the existing **Start Game Management when I sign in** option and prevented watcher restarts or application upgrades from silently changing that choice or unpausing the watcher.
+- Added a live `HH:MM:SS` Work Mode session display backed by the shared session start timestamp, so UI delays do not cause timer drift.
+- Kept Game and Work sessions isolated through the existing single active-mode watcher lifecycle and shared timer/session state.
+- Corrected short-session logs and saved total-time labels so Work sessions are no longer described as Game sessions.
+
+## 2.1.0 — 2026-09-15
 
 - Added a whole-interface flip between Game Management and Work Management.
 - Placed the Work mode button immediately before Show activity.

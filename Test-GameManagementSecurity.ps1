@@ -154,6 +154,15 @@ Add-Check 'Work profile avoids gaming power changes' (
     $watcher -match '\$script:activeMode -eq ''game'' -and \(Get-ActiveScheme\) -ne \$managementPlanGuid' -and
     $watcher -match 'if \(\$script:activeMode -eq ''game''\) \{ Send-GameEscape'
 ) 'Selected work apps receive focus timing without gaming power-plan, brightness, or Escape behavior.'
+Add-Check 'Timestamp-based Work session timer' (
+    $appSource -match 'private DateTime\? workSessionStartedAt' -and
+    $appSource -match 'ManagementStarted' -and
+    $appSource -match 'DateTime\.Now - workSessionStartedAt\.Value' -and
+    $appSource -match 'string\.Format\("\{0:00\}:\{1:00\}:\{2:00\}"' -and
+    $appSource -match 'if \(workView\) \{ RefreshWorkElapsedDisplay\(\); RefreshWorkTimerDisplay\(\); \}' -and
+    $watcher -match '\$script:sessionStartedAt = Get-Date' -and
+    $watcher -match 'Clear-GameTimer'
+) 'Work Mode reuses the shared session lifecycle timestamp and displays HH:MM:SS elapsed time without incrementing a GUI counter.'
 Add-Check 'Target-verified Escape control' (
     $watcher -match 'MainWindowHandle' -and
     $watcher -match 'GetForegroundWindow\(\) -ne \$targetHandle' -and
@@ -162,10 +171,37 @@ Add-Check 'Target-verified Escape control' (
     $watcher -notmatch 'SendKeys.*ESC'
 ) 'Escape is sent only after the detected game window is selected and verified as the foreground window; there is no global fallback.'
 Add-Check 'Timer dialog only at timer transitions' (
-    $watcher -match "--timer-alert', 'game-finished'" -and
-    $watcher -match "--timer-alert', 'break-finished'" -and
+    $watcher -match "'game-finished'" -and
+    $watcher -match "'break-finished'" -and
+    $watcher -match "'work-finished'" -and
+    $watcher -match "'work-break-finished'" -and
     $watcher -notmatch 'Set-BreakInterface\s+\$(true|false)'
 ) 'Timer transitions open only the alarm dialog and do not show or hide the main interface.'
+Add-Check 'Independent Work timer settings and state' (
+    $appSource -match 'workTimerEnabled' -and
+    $appSource -match 'workTimerMinutes' -and
+    $appSource -match 'workBreakMinutes' -and
+    $watcher -match 'work-timer-state\.json' -and
+    $watcher -match "\$script:activeMode -eq 'work'" -and
+    $watcher -match 'workTimerEnabled' -and
+    $watcher -match 'workTimerMinutes' -and
+    $watcher -match '\$script:gameTimerEnabled = if \(\$null -ne \$config.workTimerEnabled\)' -and
+    $appSource -match 'if \(!settingsMap.ContainsKey\("workTimerEnabled"\)\) settings.workTimerEnabled = true'
+) 'Work and Game use separate saved settings and timer-state files while sharing the countdown controller.'
+Add-Check 'Installed app selection retains file browse' (
+    $appSource -match 'InstalledAppsForm' -and
+    $appSource -match 'App Paths' -and
+    $appSource -match 'Browse file\.\.\.' -and
+    $appSource -match 'OpenFileDialog' -and
+    $appSource -match 'LaunchSelectedWorkApplication'
+) 'Installed apps can be chosen and launched; the existing executable picker remains available.'
+Add-Check 'Weekly report from existing session history' (
+    $appSource -match 'internal static class WeeklyReport' -and
+    $appSource -match 'GameSessionHistory\.txt' -and
+    $appSource -match 'sliceEnd - cursor' -and
+    $appSource -match 'Mode' -and
+    $appSource -match 'Applications'
+) 'Weekly totals are split at midnight and week boundaries from recorded start/end times.'
 Add-Check 'Read-only CPU and GPU temperatures' (
     $appSource -match 'performanceTimer\.Interval\s*=\s*1000' -and
     $appSource -match 'GetCPUTemp' -and
@@ -178,7 +214,8 @@ Add-Check 'Read-only CPU and GPU temperatures' (
 Add-Check 'Idle tray sensor suspension' (
     $appSource -match 'if \(!Visible && !File\.Exists\(statePath\)\)' -and
     $appSource -match 'if \(File\.Exists\(performanceStatePath\)\) File\.Delete\(performanceStatePath\);' -and
-    $appSource -match 'if \(Visible\) RefreshTimerDisplay'
+    $appSource -match 'if \(!Visible \|\| modeSwitchInProgress\) return;' -and
+    $appSource -match 'else RefreshTimerDisplay\(IsRuntimeMode\("game"\)\);'
 ) 'Hidden idle operation skips GPU, CPU, and timer display polling, removes stale session snapshots, and keeps active monitoring real time.'
 Add-Check 'Single power-plan status query' (
     $appSource -match 'activeSchemeOutput\s*=\s*RunCapture\("powercfg\.exe", "/getactivescheme"\)' -and
@@ -201,7 +238,9 @@ Add-Check 'Exited game cleanup' (
 ) 'Exited process entries and known crash reporters are ignored so management mode can restore after the real game closes.'
 Add-Check 'Persistent game session notes' (
     $watcher -match 'GameSessionHistory\.txt' -and
-    $watcher -match 'Total game time:' -and
+    $watcher -match '''Total work time''' -and
+    $watcher -match '''Total game time''' -and
+    $watcher -match '\$\{timeLabel\}:' -and
     $watcher -match 'Timer cycles:' -and
     $watcher -match 'Peak CPU temperature:' -and
     $watcher -match 'Peak GPU temperature:' -and
@@ -209,12 +248,26 @@ Add-Check 'Persistent game session notes' (
 ) 'A plain-text history and visible exit summary store the game, date/time, duration, cycles, and peak CPU/GPU temperatures.'
 Add-Check 'Short sessions excluded from history' (
     $watcher -match '\$duration\.TotalSeconds\s*-le\s*120' -and
-    $watcher -match 'Game session not saved because it lasted 2 minutes or less' -and
+    $watcher -match '\$sessionLabel session not saved because it lasted 2 minutes or less' -and
     $watcher -match 'Remove-Item\s+-LiteralPath\s+\$lastSessionPath' -and
     $watcher -match 'return'
 ) 'Sessions lasting exactly two minutes or less do not update history or open a saved-session summary.'
 $installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-GameManagement.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
+Add-Check 'Single configurable application startup' (
+    $installer -match '\$application\s*=\s*Join-Path \$root ''GameManagement\.exe''' -and
+    $installer -match '--ui-start-hidden' -and
+    $appSource -match 'SetStartup\(startupCheck\.Checked\)' -and
+    $appSource -match 'RemoveRunEntry\(\)' -and
+    $appSource -match 'StopWatcherForSettingsChange\(previousSettings\.activeMode\)' -and
+    $appSource -match 'StartWatcherAfterSettingsChange\(\)' -and
+    $installer -match '\$isUpgrade\s*=\s*Test-Path -LiteralPath \$backupPath' -and
+    $installer -match '\$startupWasEnabled' -and
+    $installer -match 'if \(-not \$isUpgrade -or \$startupWasEnabled\)' -and
+    $installer -match '\$engineWasEnabled\s*=\s*Test-Path -LiteralPath \$engineEnabledPath' -and
+    $installer -match 'if \(-not \$isUpgrade -or \$engineWasEnabled\)' -and
+    ([regex]::Matches($installer, '\$runName\s*=\s*''GameManagementEngine''').Count -eq 1)
+) 'One per-user Run entry launches the single-instance application hidden, and watcher restarts and upgrades preserve the startup and paused choices.'
 $setupPath=Join-Path $PackagePath 'GameManagementSetup.cs'
 $installerBuilderPath=Join-Path $PackagePath 'Build-GameManagementInstaller.ps1'
 $packageBuildFilesPresent=(Test-Path -LiteralPath $setupPath) -and (Test-Path -LiteralPath $installerBuilderPath)

@@ -5,6 +5,9 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $ConfigPath) { $ConfigPath = Join-Path $root 'settings.json' }
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
+$workTimerStatePath = Join-Path $root 'work-timer-state.json'
+$modeSwitchRequestPath = Join-Path $root 'mode-switch-request.json'
+$modeSwitchAckPath = Join-Path $root 'mode-switch-ack.json'
 $performanceStatePath = Join-Path $root 'performance-state.json'
 $lastSessionPath = Join-Path $root 'last-session.json'
 $sessionHistoryPath = Join-Path $root 'GameSessionHistory.txt'
@@ -28,6 +31,7 @@ $timerDeadline = $null
 $timerAlerted = $false
 $timerCycle = 1
 $sessionStartedAt = $null
+$sessionId = $null
 $sessionGameNames = @()
 $activeMode = 'game'
 $mutex = $null
@@ -78,7 +82,7 @@ function Format-SessionDuration([TimeSpan]$duration) {
     return "$([Math]::Max(1, [int][Math]::Ceiling($duration.TotalSeconds))) sec"
 }
 
-function Write-GameSessionSummary {
+function Write-GameSessionSummary([bool]$showDialog = $true) {
     $endedAt = Get-Date
     $startedAt = $script:sessionStartedAt
     if ($null -eq $startedAt -and (Test-Path -LiteralPath $statePath)) {
@@ -86,12 +90,18 @@ function Write-GameSessionSummary {
     }
     if ($null -eq $startedAt) { $startedAt = $endedAt }
     $duration = $endedAt - $startedAt
+    $sessionLabel = if ($script:activeMode -eq 'work') { 'Work' } else { 'Game' }
+    $timeLabel = if ($script:activeMode -eq 'work') { 'Total work time' } else { 'Total game time' }
     if ($duration.TotalSeconds -le 120) {
         Remove-Item -LiteralPath $lastSessionPath -Force -ErrorAction SilentlyContinue
-        Write-Log "Game session not saved because it lasted 2 minutes or less ($(Format-SessionDuration $duration))"
+        Write-Log "$sessionLabel session not saved because it lasted 2 minutes or less ($(Format-SessionDuration $duration))"
         return
     }
     $gameName = if (@($script:sessionGameNames).Count) { @($script:sessionGameNames) -join ', ' } else { 'Detected game' }
+    $currentSessionId = [string]$script:sessionId
+    if ([string]::IsNullOrWhiteSpace($currentSessionId)) {
+        $currentSessionId = "$($script:activeMode)-$($startedAt.Ticks)"
+    }
     $cycles = if ($script:gameTimerEnabled) { [Math]::Max(1, [int]$script:timerCycle) } else { 0 }
     $peakCpu = $null
     $peakGpu = $null
@@ -106,6 +116,7 @@ function Write-GameSessionSummary {
     $peakCpuText = if ($null -eq $peakCpu) { 'Unavailable' } else { "$([Math]::Round($peakCpu, 1))$degreeC" }
     $peakGpuText = if ($null -eq $peakGpu) { 'Unavailable' } else { "$([Math]::Round($peakGpu, 1))$degreeC" }
     $summary = [ordered]@{
+        SessionId = $currentSessionId
         Mode = $script:activeMode
         Game = $gameName
         StartedAt = $startedAt.ToString('yyyy-MM-dd HH:mm:ss')
@@ -116,22 +127,39 @@ function Write-GameSessionSummary {
         PeakCpu = $peakCpuText
         PeakGpu = $peakGpuText
     }
-    $summary | ConvertTo-Json | Set-Content -LiteralPath $lastSessionPath -Encoding UTF8
-    @(
+    $historyLines = @(
         '------------------------------------------------------------'
+        "SessionId: $currentSessionId"
         "Date: $($endedAt.ToString('yyyy-MM-dd'))"
         "Mode: $script:activeMode"
         "Applications: $gameName"
         "Started: $($startedAt.ToString('yyyy-MM-dd HH:mm:ss'))"
         "Finished: $($endedAt.ToString('yyyy-MM-dd HH:mm:ss'))"
-        "Total game time: $(Format-SessionDuration $duration) ($([Math]::Round($duration.TotalHours, 3)) hours)"
+        "${timeLabel}: $(Format-SessionDuration $duration) ($([Math]::Round($duration.TotalHours, 3)) hours)"
         "Timer cycles: $cycles"
         "Peak CPU temperature: $peakCpuText"
         "Peak GPU temperature: $peakGpuText"
-    ) | Add-Content -LiteralPath $sessionHistoryPath -Encoding UTF8
+    )
+    $existingHistory = if (Test-Path -LiteralPath $sessionHistoryPath) { [IO.File]::ReadAllText($sessionHistoryPath) } else { '' }
+    $alreadyWritten = $existingHistory.Contains("SessionId: $currentSessionId")
+    if (-not $alreadyWritten) {
+        $historyBlock = ($historyLines -join [Environment]::NewLine) + [Environment]::NewLine
+        $separator = if ($existingHistory.Length -gt 0 -and -not $existingHistory.EndsWith("`n")) { [Environment]::NewLine } else { '' }
+        $historyText = $existingHistory + $separator + $historyBlock
+        $temporaryHistoryPath = Join-Path $root "GameSessionHistory.$currentSessionId.tmp"
+        $backupHistoryPath = Join-Path $root "GameSessionHistory.$currentSessionId.bak"
+        [IO.File]::WriteAllText($temporaryHistoryPath, $historyText, [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $sessionHistoryPath) {
+            [IO.File]::Replace($temporaryHistoryPath, $sessionHistoryPath, $backupHistoryPath)
+            Remove-Item -LiteralPath $backupHistoryPath -Force -ErrorAction SilentlyContinue
+        } else {
+            [IO.File]::Move($temporaryHistoryPath, $sessionHistoryPath)
+        }
+    }
+    $summary | ConvertTo-Json | Set-Content -LiteralPath $lastSessionPath -Encoding UTF8 -ErrorAction Stop
     Write-Log "$script:activeMode session saved for $gameName; duration $(Format-SessionDuration $duration); cycles $cycles; peak CPU temperature $peakCpuText; peak GPU temperature $peakGpuText"
     $app = Join-Path $root 'GameManagement.exe'
-    if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app -ArgumentList '--session-summary' }
+    if ($showDialog -and (Test-Path -LiteralPath $app)) { Start-Process -FilePath $app -ArgumentList '--session-summary' }
 }
 
 function Send-GameEscape($gameProcesses, [string]$reason) {
@@ -257,6 +285,7 @@ function Set-DisplayBrightness([int]$percent) {
 
 function Save-State {
     @{
+        SessionId = $script:sessionId
         OriginalPowerScheme = $script:originalGuid
         OriginalBrightness = $script:originalBrightness
         ManagementStarted = (Get-Date).ToString('o')
@@ -279,17 +308,18 @@ function Save-GameTimerState {
         Minutes = $phaseMinutes
         Alerted = $script:timerAlerted
         Cycle = $script:timerCycle
-    } | ConvertTo-Json | Set-Content -LiteralPath $timerStatePath -Encoding UTF8
+        Mode = $script:activeMode
+    } | ConvertTo-Json | Set-Content -LiteralPath $(if ($script:activeMode -eq 'work') { $workTimerStatePath } else { $timerStatePath }) -Encoding UTF8
 }
 
 function Start-GameTimer {
     if (-not $script:gameTimerEnabled -or $script:gameTimerMinutes -lt 1) { return }
-    $script:timerPhase = 'Game'
+    $script:timerPhase = if ($script:activeMode -eq 'work') { 'Work' } else { 'Game' }
     $script:timerCycle = 1
     $script:timerDeadline = (Get-Date).AddMinutes($script:gameTimerMinutes)
     $script:timerAlerted = $false
     Save-GameTimerState
-    Write-Log "Game timer started for $script:gameTimerMinutes minutes"
+    Write-Log "$($script:timerPhase) timer started for $script:gameTimerMinutes minutes"
 }
 
 function Update-GameTimer($gameProcesses) {
@@ -297,28 +327,30 @@ function Update-GameTimer($gameProcesses) {
     if ((Get-Date) -lt $script:timerDeadline) { return }
 
     $alertApp = Join-Path $root 'GameManagement.exe'
-    if ($script:timerPhase -eq 'Game') {
-        Write-Log "Game timer finished after $script:gameTimerMinutes minutes; break timer started for $script:breakTimerMinutes minutes"
+    if ($script:timerPhase -ne 'Break') {
+        Write-Log "$($script:timerPhase) timer finished after $script:gameTimerMinutes minutes; break timer started for $script:breakTimerMinutes minutes"
         $script:timerPhase = 'Break'
         $script:timerDeadline = (Get-Date).AddMinutes($script:breakTimerMinutes)
         $script:timerAlerted = $false
         Save-GameTimerState
         if ($script:activeMode -eq 'game') { Send-GameEscape $gameProcesses 'break start' | Out-Null }
         if (Test-Path -LiteralPath $alertApp) {
-            Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', 'game-finished', [string]$script:gameTimerMinutes, [string]$script:breakTimerMinutes)
+            $alertType = if ($script:activeMode -eq 'work') { 'work-finished' } else { 'game-finished' }
+            Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', $alertType, [string]$script:gameTimerMinutes, [string]$script:breakTimerMinutes)
         } else {
             try { [Console]::Beep(880, 700) } catch {}
         }
     } else {
-        Write-Log "Break timer finished after $script:breakTimerMinutes minutes; game timer restarted for $script:gameTimerMinutes minutes"
-        $script:timerPhase = 'Game'
+        $script:timerPhase = if ($script:activeMode -eq 'work') { 'Work' } else { 'Game' }
+        Write-Log "Break timer finished after $script:breakTimerMinutes minutes; $($script:timerPhase) timer restarted for $script:gameTimerMinutes minutes"
         $script:timerCycle++
         $script:timerDeadline = (Get-Date).AddMinutes($script:gameTimerMinutes)
         $script:timerAlerted = $false
         Save-GameTimerState
         if ($script:activeMode -eq 'game') { Send-GameEscape $gameProcesses 'break end' | Out-Null }
         if (Test-Path -LiteralPath $alertApp) {
-            Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', 'break-finished', [string]$script:breakTimerMinutes, [string]$script:gameTimerMinutes)
+            $alertType = if ($script:activeMode -eq 'work') { 'work-break-finished' } else { 'break-finished' }
+            Start-Process -FilePath $alertApp -ArgumentList @('--timer-alert', $alertType, [string]$script:breakTimerMinutes, [string]$script:gameTimerMinutes)
         } else {
             try { [Console]::Beep(1047, 700) } catch {}
         }
@@ -326,7 +358,8 @@ function Update-GameTimer($gameProcesses) {
 }
 
 function Clear-GameTimer {
-    Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
+    $activeTimerPath = if ($script:activeMode -eq 'work') { $workTimerStatePath } else { $timerStatePath }
+    Remove-Item -LiteralPath $activeTimerPath -Force -ErrorAction SilentlyContinue
     $script:timerDeadline = $null
     $script:timerAlerted = $false
     $script:timerPhase = 'Game'
@@ -423,6 +456,7 @@ function Find-RunningWorkApps($selectedPaths) {
 
 function Start-Management($gameProcesses) {
     $script:sessionStartedAt = Get-Date
+    $script:sessionId = [guid]::NewGuid().ToString('N')
     $script:sessionGameNames = @($gameProcesses.ProcessName | Sort-Object -Unique)
     Remove-Item -LiteralPath $performanceStatePath -Force -ErrorAction SilentlyContinue
     Start-BackgroundInterface
@@ -456,11 +490,12 @@ function Start-Management($gameProcesses) {
     Write-Log "Game Management ON; previous plan $script:originalGuid; games: $($gameProcesses.ProcessName -join ', ')"
 }
 
-function Stop-Management([bool]$showSessionSummary = $false) {
+function Stop-Management([bool]$showSessionSummary = $false, [bool]$showSummaryDialog = $true) {
     $savedState = $null
     if (Test-Path -LiteralPath $statePath) {
         $savedState = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
     }
+    $hasManagedState = $script:active -or ($null -ne $savedState)
     $restoreGuid = $script:originalGuid
     if (-not $restoreGuid -and $savedState) {
         $restoreGuid = $savedState.OriginalPowerScheme
@@ -470,8 +505,8 @@ function Stop-Management([bool]$showSessionSummary = $false) {
         $restoreBrightness = [int]$savedState.OriginalBrightness
     }
     if ($script:activeMode -eq 'work') {
-        Write-Log 'Work Management OFF; selected applications closed'
-    } else {
+        if ($hasManagedState) { Write-Log 'Work Management OFF; selected applications closed' }
+    } elseif ($hasManagedState) {
         if (-not $restoreGuid) { $restoreGuid = $balancedGuid }
         if (Set-Scheme $restoreGuid) { Write-Log "Game Management OFF; restored plan $restoreGuid" }
         else { Write-Log "Game Management OFF but restoring plan $restoreGuid failed" }
@@ -480,15 +515,30 @@ function Stop-Management([bool]$showSessionSummary = $false) {
             else { Write-Log "Brightness restoration to $restoreBrightness% failed" }
         }
     }
-    if ($showSessionSummary) { Write-GameSessionSummary }
+    if ($showSessionSummary -and $script:active) { Write-GameSessionSummary $showSummaryDialog }
     Clear-State
     Clear-GameTimer
     $script:active = $false
     $script:originalGuid = $null
     $script:originalBrightness = $null
     $script:sessionStartedAt = $null
+    $script:sessionId = $null
     $script:sessionGameNames = @()
     if ($null -ne $restoreBrightness) { $script:lastIdleBrightness = $restoreBrightness }
+}
+
+function Test-ModeSwitchRequest($request) {
+    if ($null -eq $request -or [string]::IsNullOrWhiteSpace([string]$request.RequestId) -or
+        -not [string]::Equals([string]$request.Mode, $script:activeMode, [StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+    try {
+        $expiry = [datetime]::Parse([string]$request.ExpiresUtc, [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        if ((Get-Date).ToUniversalTime() -ge $expiry) { return $false }
+        $owner = Get-Process -Id ([int]$request.RequesterPid) -ErrorAction Stop
+        return $owner.StartTime.ToUniversalTime().Ticks -eq [long]$request.RequesterStartTicks
+    } catch { return $false }
 }
 
 try {
@@ -507,6 +557,7 @@ try {
         Clear-State
     }
     Clear-GameTimer
+    Remove-Item -LiteralPath $workTimerStatePath -Force -ErrorAction SilentlyContinue
 
     $config = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json
     if ($null -ne $config.gameBrightnessPercent) {
@@ -525,6 +576,11 @@ try {
         $script:pauseGameWithEscape = [bool]$config.pauseGameWithEscape
     }
     if ([string]$config.activeMode -eq 'work') { $script:activeMode = 'work' }
+    if ($script:activeMode -eq 'work') {
+        $script:gameTimerEnabled = if ($null -ne $config.workTimerEnabled) { [bool]$config.workTimerEnabled } else { $true }
+        $script:gameTimerMinutes = if ($null -ne $config.workTimerMinutes) { [Math]::Max(1, [Math]::Min(240, [int]$config.workTimerMinutes)) } else { 30 }
+        $script:breakTimerMinutes = if ($null -ne $config.workBreakMinutes) { [Math]::Max(1, [Math]::Min(60, [int]$config.workBreakMinutes)) } else { 5 }
+    }
     Update-IdleBrightness $true
     $folders = Get-GameFolders $config
     $excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -537,6 +593,43 @@ try {
     Write-Log "Watcher started in AC-only $script:activeMode mode; cached idle brightness: $cachedBrightnessText; monitoring: $monitoringText"
 
     do {
+        if (Test-Path -LiteralPath $modeSwitchRequestPath) {
+            $transitionMutex = [Threading.Mutex]::new($false, 'Local\GameManagementTransition_v1')
+            $transitionHeld = $false
+            $handoffFinished = $false
+            try {
+                try { $transitionHeld = $transitionMutex.WaitOne() }
+                catch [Threading.AbandonedMutexException] { $transitionHeld = $true }
+                $modeSwitchRequest = $null
+                try { $modeSwitchRequest = Get-Content -Raw -LiteralPath $modeSwitchRequestPath -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch {}
+                if (-not (Test-ModeSwitchRequest $modeSwitchRequest)) {
+                    Remove-Item -LiteralPath $modeSwitchRequestPath -Force -ErrorAction SilentlyContinue
+                } else {
+                    $requestId = [string]$modeSwitchRequest.RequestId
+                    try {
+                        Stop-Management $true $false
+                        $ack = [ordered]@{
+                            RequestId = $requestId
+                            Mode = $script:activeMode
+                            Saved = $true
+                        } | ConvertTo-Json -Compress
+                        $ackTemporaryPath = Join-Path $root "mode-switch-ack.$requestId.tmp"
+                        [IO.File]::WriteAllText($ackTemporaryPath, $ack, [Text.UTF8Encoding]::new($false))
+                        [IO.File]::Move($ackTemporaryPath, $modeSwitchAckPath)
+                        Remove-Item -LiteralPath $modeSwitchRequestPath -Force -ErrorAction SilentlyContinue
+                        Write-Log "Mode-switch stop request $requestId completed for $script:activeMode mode"
+                        $handoffFinished = $true
+                    } catch {
+                        Write-Log "Mode-switch stop request $requestId failed: $($_.Exception.Message)"
+                    }
+                }
+            } finally {
+                if ($transitionHeld) { $transitionMutex.ReleaseMutex() }
+                $transitionMutex.Dispose()
+            }
+            if ($handoffFinished) { break }
+        }
+
         $running = if ($script:activeMode -eq 'work') { Find-RunningWorkApps $workApps } else { Find-RunningGames $folders $excluded }
         $onAcPower = Test-AcPower
         if (-not $onAcPower) {

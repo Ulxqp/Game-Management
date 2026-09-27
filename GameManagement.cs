@@ -354,9 +354,11 @@ namespace GameManagement
         {
             this.previewOnly = previewOnly;
             bool breakFinished = string.Equals(alertType, "break-finished", StringComparison.OrdinalIgnoreCase);
+            bool workAlert = alertType.StartsWith("work-", StringComparison.OrdinalIgnoreCase);
+            breakFinished = breakFinished || string.Equals(alertType, "work-break-finished", StringComparison.OrdinalIgnoreCase);
             string heading = breakFinished ? "Break over!" : "Time for a break!";
-            string timerName = breakFinished ? "Game timer" : "Break timer";
-            string message = breakFinished ? "You can play again." : "Your game time is up.";
+            string timerName = breakFinished ? (workAlert ? "Work timer" : "Game timer") : "Break timer";
+            string message = breakFinished ? (workAlert ? "You can work again." : "You can play again.") : (workAlert ? "Your work time is up." : "Your game time is up.");
 
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(440, 230);
@@ -483,6 +485,9 @@ namespace GameManagement
         public bool gameTimerEnabled { get; set; }
         public int gameTimerMinutes { get; set; }
         public int breakTimerMinutes { get; set; }
+        public bool workTimerEnabled { get; set; }
+        public int workTimerMinutes { get; set; }
+        public int workBreakMinutes { get; set; }
         public bool pauseGameWithEscape { get; set; }
         public string[] gameFolders { get; set; }
         public string[] excludedProcesses { get; set; }
@@ -691,6 +696,310 @@ namespace GameManagement
         }
     }
 
+    internal sealed class InstalledApp
+    {
+        public string Name;
+        public string Path;
+    }
+
+    internal sealed class InstalledAppsForm : RetroDialogForm
+    {
+        private readonly ListView list = new ListView();
+        private readonly TextBox search = new TextBox();
+        private readonly List<InstalledApp> applications;
+        private readonly ImageList icons = new ImageList();
+        public string SelectedPath { get; private set; }
+
+        public InstalledAppsForm()
+        {
+            ClientSize = new Size(600, 460);
+            StartPosition = FormStartPosition.CenterParent;
+            BuildRetroChrome("Choose installed application");
+            Label help = new Label { Text = "Select an app. Browse file... is available for anything missing here.", Location = new Point(15, 13), AutoSize = true };
+            ContentPanel.Controls.Add(help);
+            search.Location = new Point(15, 37);
+            search.Width = 565;
+            search.TextChanged += delegate { FillList(); };
+            ContentPanel.Controls.Add(search);
+            list.Location = new Point(15, 68);
+            list.Size = new Size(565, 310);
+            list.View = View.Details;
+            list.FullRowSelect = true;
+            list.MultiSelect = false;
+            list.Columns.Add("Application", 220);
+            list.Columns.Add("Executable", 320);
+            icons.ImageSize = new Size(16, 16);
+            list.SmallImageList = icons;
+            list.DoubleClick += delegate { SelectApp(); };
+            ContentPanel.Controls.Add(list);
+            Button add = RetroButton("Add selected", 105, 25);
+            add.Location = new Point(475, 389);
+            add.TabStop = true;
+            add.Click += delegate { SelectApp(); };
+            ContentPanel.Controls.Add(add);
+            AcceptButton = add;
+            applications = Discover();
+            FillList();
+        }
+
+        private void FillList()
+        {
+            if (applications == null) return;
+            list.BeginUpdate();
+            try
+            {
+                list.Items.Clear();
+                icons.Images.Clear();
+                foreach (InstalledApp app in applications.Where(item => item.Name.IndexOf(search.Text, StringComparison.OrdinalIgnoreCase) >= 0 || item.Path.IndexOf(search.Text, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    int imageIndex = -1;
+                    try
+                    {
+                        using (Icon icon = Icon.ExtractAssociatedIcon(app.Path))
+                        {
+                            if (icon != null) { icons.Images.Add(icon); imageIndex = icons.Images.Count - 1; }
+                        }
+                    }
+                    catch { }
+                    ListViewItem row = new ListViewItem(app.Name, imageIndex);
+                    row.SubItems.Add(app.Path);
+                    row.Tag = app.Path;
+                    list.Items.Add(row);
+                }
+            }
+            finally { list.EndUpdate(); }
+        }
+
+        private void SelectApp()
+        {
+            if (list.SelectedItems.Count == 0) return;
+            string path = Convert.ToString(list.SelectedItems[0].Tag);
+            if (!File.Exists(path)) { MessageBox.Show(this, "That application is no longer available. Try Browse file...", "Game Management"); return; }
+            SelectedPath = path;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        internal static List<InstalledApp> Discover()
+        {
+            Dictionary<string, InstalledApp> found = new Dictionary<string, InstalledApp>(StringComparer.OrdinalIgnoreCase);
+            foreach (RegistryHive hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            foreach (RegistryView view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                try
+                {
+                    using (RegistryKey root = RegistryKey.OpenBaseKey(hive, view))
+                    using (RegistryKey paths = root.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"))
+                    {
+                        if (paths == null) continue;
+                        foreach (string name in paths.GetSubKeyNames())
+                        {
+                            using (RegistryKey entry = paths.OpenSubKey(name))
+                                AddCandidate(found, Path.GetFileNameWithoutExtension(name), Convert.ToString(entry == null ? null : entry.GetValue(null)));
+                        }
+                    }
+                }
+                catch { }
+            }
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType != null)
+            {
+                object shell = null;
+                try
+                {
+                    shell = Activator.CreateInstance(shellType);
+                    foreach (string folder in new[] { Environment.GetFolderPath(Environment.SpecialFolder.Programs), Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms) })
+                    {
+                        string[] shortcuts;
+                        try { shortcuts = Directory.GetFiles(folder, "*.lnk", SearchOption.AllDirectories); }
+                        catch { continue; }
+                        foreach (string shortcutPath in shortcuts)
+                        {
+                            object shortcut = null;
+                            try
+                            {
+                                shortcut = shellType.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+                                string target = Convert.ToString(shortcut.GetType().InvokeMember("TargetPath", System.Reflection.BindingFlags.GetProperty, null, shortcut, null));
+                                string arguments = Convert.ToString(shortcut.GetType().InvokeMember("Arguments", System.Reflection.BindingFlags.GetProperty, null, shortcut, null));
+                                if (string.IsNullOrWhiteSpace(arguments)) AddCandidate(found, Path.GetFileNameWithoutExtension(shortcutPath), target);
+                            }
+                            catch { }
+                            finally { if (shortcut != null && Marshal.IsComObject(shortcut)) Marshal.FinalReleaseComObject(shortcut); }
+                        }
+                    }
+                }
+                catch { }
+                finally { if (shell != null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell); }
+            }
+            return found.Values.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        private static void AddCandidate(Dictionary<string, InstalledApp> found, string name, string rawPath)
+        {
+            if (string.IsNullOrWhiteSpace(rawPath)) return;
+            string path = Environment.ExpandEnvironmentVariables(rawPath.Trim().Trim('"'));
+            if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(path)) return;
+            string windowsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (path.StartsWith(windowsFolder, StringComparison.OrdinalIgnoreCase)) return;
+            if (path.IndexOf(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf(@"\Windows Mail\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf(@"\Common Files\microsoft shared\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                path.IndexOf(@"\Internet Explorer\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                string.Equals(path, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GameManagement.exe"), StringComparison.OrdinalIgnoreCase)) return;
+            string label = string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(path) : name.Trim();
+            if (string.Equals(Path.GetFileName(path), "DesktopOverlayHost.exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetFileName(path), "nahimicNotifSys.exe", StringComparison.OrdinalIgnoreCase) ||
+                System.Text.RegularExpressions.Regex.IsMatch(label + " " + Path.GetFileName(path), @"(^|[\s_-])(uninstall|unins\d*|update|updater|helper|crash|setup|installer|stackbuilder|diagnostic|bootstrapper|pg_ctl)([\s_.-]|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return;
+            if (string.Equals(label, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    string description = FileVersionInfo.GetVersionInfo(path).FileDescription;
+                    if (!string.IsNullOrWhiteSpace(description)) label = description.Trim();
+                }
+                catch { }
+            }
+            InstalledApp existing;
+            if (found.TryGetValue(path, out existing))
+            {
+                if (label.Length > existing.Name.Length) existing.Name = label;
+            }
+            else found.Add(path, new InstalledApp { Name = label, Path = path });
+        }
+    }
+
+    internal sealed class TrackedSession
+    {
+        public string Mode;
+        public string Application;
+        public DateTime Start;
+        public DateTime End;
+    }
+
+    internal static class WeeklyReport
+    {
+        internal static List<TrackedSession> Load(string path)
+        {
+            List<TrackedSession> sessions = new List<TrackedSession>();
+            if (!File.Exists(path)) return sessions;
+            string mode = "game", application = "";
+            DateTime start = DateTime.MinValue, end = DateTime.MinValue;
+            Action flush = delegate
+            {
+                if (start != DateTime.MinValue && end > start)
+                    sessions.Add(new TrackedSession { Mode = mode, Application = application, Start = start, End = end });
+                mode = "game"; application = ""; start = end = DateTime.MinValue;
+            };
+            foreach (string line in File.ReadLines(path))
+            {
+                if (line.StartsWith("----", StringComparison.Ordinal)) { flush(); continue; }
+                int separator = line.IndexOf(':');
+                if (separator < 0) continue;
+                string key = line.Substring(0, separator).Trim();
+                string value = line.Substring(separator + 1).Trim();
+                if (key == "Mode") mode = string.Equals(value, "work", StringComparison.OrdinalIgnoreCase) ? "work" : "game";
+                else if (key == "Applications" || key == "Game") application = value;
+                else if (key == "Started") start = ParseHistoryTime(value);
+                else if (key == "Finished") end = ParseHistoryTime(value);
+            }
+            flush();
+            return sessions;
+        }
+
+        private static DateTime ParseHistoryTime(string value)
+        {
+            DateTime parsed;
+            if (DateTime.TryParseExact(value, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out parsed)) return parsed;
+            return DateTime.TryParse(value, out parsed) ? parsed : DateTime.MinValue;
+        }
+
+        internal static string Build(IEnumerable<TrackedSession> sessions, DateTime weekStart)
+        {
+            DateTime beginning = weekStart.Date;
+            DateTime ending = beginning.AddDays(7);
+            TimeSpan[] game = new TimeSpan[7], work = new TimeSpan[7];
+            Dictionary<string, TimeSpan> gameApps = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, TimeSpan> workApps = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+            int gameSessions = 0, workSessions = 0;
+            int unattributed = 0;
+            foreach (TrackedSession session in sessions)
+            {
+                if (session == null || session.End <= session.Start || session.End <= beginning || session.Start >= ending) continue;
+                bool isWork = string.Equals(session.Mode, "work", StringComparison.OrdinalIgnoreCase);
+                if (isWork) workSessions++; else gameSessions++;
+                DateTime cursor = session.Start > beginning ? session.Start : beginning;
+                DateTime stop = session.End < ending ? session.End : ending;
+                TimeSpan weeklyDuration = stop - cursor;
+                if (string.IsNullOrWhiteSpace(session.Application) || session.Application.Contains(",")) unattributed++;
+                else
+                {
+                    Dictionary<string, TimeSpan> apps = isWork ? workApps : gameApps;
+                    TimeSpan prior;
+                    apps.TryGetValue(session.Application, out prior);
+                    apps[session.Application] = prior + weeklyDuration;
+                }
+                while (cursor < stop)
+                {
+                    int day = (int)(cursor.Date - beginning).TotalDays;
+                    DateTime dayEnd = cursor.Date.AddDays(1);
+                    DateTime sliceEnd = stop < dayEnd ? stop : dayEnd;
+                    if (isWork) work[day] += sliceEnd - cursor; else game[day] += sliceEnd - cursor;
+                    cursor = sliceEnd;
+                }
+            }
+            StringBuilder report = new StringBuilder();
+            report.AppendLine("Week of " + beginning.ToString("yyyy-MM-dd") + " to " + ending.AddDays(-1).ToString("yyyy-MM-dd"));
+            report.AppendLine();
+            for (int day = 0; day < 7; day++)
+                report.AppendLine(beginning.AddDays(day).ToString("dddd, MMM d") + "    Game " + Format(game[day]) + "    Work " + Format(work[day]) + "    Total " + Format(game[day] + work[day]));
+            TimeSpan gameTotal = TimeSpan.FromTicks(game.Sum(item => item.Ticks));
+            TimeSpan workTotal = TimeSpan.FromTicks(work.Sum(item => item.Ticks));
+            report.AppendLine().AppendLine("WEEKLY SUMMARY");
+            report.AppendLine("Game Mode: " + Format(gameTotal) + " (" + gameSessions + (gameSessions == 1 ? " session)" : " sessions)"));
+            report.AppendLine("Work Mode: " + Format(workTotal) + " (" + workSessions + (workSessions == 1 ? " session)" : " sessions)"));
+            report.AppendLine("Total tracked time: " + Format(gameTotal + workTotal));
+            AppendApplications(report, "Games", gameApps);
+            AppendApplications(report, "Work applications", workApps);
+            if (gameApps.Count > 0) report.AppendLine("Most used game: " + gameApps.OrderByDescending(item => item.Value).First().Key);
+            if (workApps.Count > 0) report.AppendLine("Most used work app: " + workApps.OrderByDescending(item => item.Value).First().Key);
+            if (unattributed > 0) report.AppendLine().AppendLine(unattributed + " sessions used multiple or unknown apps; their time is included in mode totals but not assigned to an individual app.");
+            report.AppendLine().AppendLine("Sessions of two minutes or less were not saved by the existing history rule.");
+            return report.ToString();
+        }
+
+        private static void AppendApplications(StringBuilder report, string label, Dictionary<string, TimeSpan> apps)
+        {
+            report.AppendLine().AppendLine(label + ":");
+            if (apps.Count == 0) { report.AppendLine("No individually attributed time."); return; }
+            foreach (var app in apps.OrderByDescending(item => item.Value)) report.AppendLine("  " + app.Key + "  " + Format(app.Value));
+        }
+
+        private static string Format(TimeSpan duration)
+        {
+            return ((int)duration.TotalHours) + "h " + duration.Minutes.ToString("00") + "m";
+        }
+    }
+
+    internal sealed class WeeklyReportForm : RetroDialogForm
+    {
+        public WeeklyReportForm(string historyPath)
+        {
+            ClientSize = new Size(650, 570);
+            StartPosition = FormStartPosition.CenterParent;
+            BuildRetroChrome("Weekly Report");
+            DateTime today = DateTime.Today;
+            DateTime monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+            TextBox text = new TextBox { Location = new Point(15, 14), Size = new Size(620, 474), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Lucida Console", 9F), BackColor = Color.White };
+            try { text.Text = WeeklyReport.Build(WeeklyReport.Load(historyPath), monday); }
+            catch (Exception ex) { text.Text = "The weekly report could not be read: " + ex.Message; }
+            ContentPanel.Controls.Add(text);
+            Button close = RetroButton("Close", 92, 25);
+            close.Location = new Point(543, 498);
+            close.Click += delegate { Close(); };
+            ContentPanel.Controls.Add(close);
+        }
+    }
+
     internal sealed class MainForm : Form
     {
         private const string ManagementPlanGuid = "c8b1a303-89f5-4b03-ae3f-10b46a186527";
@@ -710,6 +1019,8 @@ namespace GameManagement
         private readonly string logPath;
         private readonly string statePath;
         private readonly string timerStatePath;
+        private readonly string workTimerStatePath;
+        private readonly string historyPath;
         private readonly string performanceStatePath;
         private readonly string engineEnabledPath;
         private readonly string watcherPath;
@@ -737,6 +1048,8 @@ namespace GameManagement
         private bool managementStateKnown;
         private bool previousManagementState;
         private DateTime lastWatcherStartAttempt = DateTime.MinValue;
+        private bool modeSwitchInProgress;
+        private string temperatureSessionKey;
         private bool exiting;
         private GameSettings settings;
 
@@ -784,6 +1097,13 @@ namespace GameManagement
         private Label workCpuValue;
         private Label workGpuValue;
         private Label workFooterLabel;
+        private Label workTimerPhaseValue;
+        private Label workMinutesLeftValue;
+        private Label workCycleValue;
+        private CheckBox workTimerEnabledCheck;
+        private NumericUpDown workTimerMinutesInput;
+        private NumericUpDown workBreakMinutesInput;
+        private DateTime? workSessionStartedAt;
         private bool workView;
         private bool targetWorkView;
         private int workspaceFlipFrame;
@@ -822,6 +1142,8 @@ namespace GameManagement
             logPath = Path.Combine(rootPath, "GameManagement.log");
             statePath = Path.Combine(rootPath, "runtime-state.json");
             timerStatePath = Path.Combine(rootPath, "timer-state.json");
+            workTimerStatePath = Path.Combine(rootPath, "work-timer-state.json");
+            historyPath = Path.Combine(rootPath, "GameSessionHistory.txt");
             performanceStatePath = Path.Combine(rootPath, "performance-state.json");
             engineEnabledPath = Path.Combine(rootPath, "engine-enabled.flag");
             watcherPath = Path.Combine(rootPath, "GameManagement.ps1");
@@ -841,7 +1163,9 @@ namespace GameManagement
             countdownTimer.Interval = 250;
             countdownTimer.Tick += delegate
             {
-                if (Visible) RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
+                if (!Visible || modeSwitchInProgress) return;
+                if (workView) { RefreshWorkElapsedDisplay(); RefreshWorkTimerDisplay(); }
+                else RefreshTimerDisplay(IsRuntimeMode("game"));
             };
             countdownTimer.Start();
 
@@ -1081,6 +1405,11 @@ namespace GameManagement
             GroupBox foldersGroup = RetroGroup("Game library folders", 20, 330, 764, 142);
             foldersGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             gameSurface.Controls.Add(foldersGroup);
+            Button gameReportButton = RetroButton("Weekly report", 108, 25);
+            gameReportButton.Location = new Point(676, 43);
+            gameReportButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            gameReportButton.Click += delegate { using (WeeklyReportForm report = new WeeklyReportForm(historyPath)) report.ShowDialog(this); };
+            gameSurface.Controls.Add(gameReportButton);
             foldersList = new ListBox();
             foldersList.Location = new Point(13, 23);
             foldersList.Size = new Size(628, 95);
@@ -1270,6 +1599,9 @@ namespace GameManagement
             AddValueRow(statusPanel, "Session time:", 56, out workElapsedValue);
             AddValueRow(statusPanel, "CPU temp:", 78, out workCpuValue);
             AddValueRow(statusPanel, "GPU temp:", 100, out workGpuValue);
+            AddWorkTimerRow(statusPanel, "Timer phase:", 12, out workTimerPhaseValue);
+            AddWorkTimerRow(statusPanel, "Minutes left:", 34, out workMinutesLeftValue);
+            AddWorkTimerRow(statusPanel, "Cycle:", 56, out workCycleValue);
 
             GroupBox apps = RetroGroup("Selected work applications", 20, 244, 764, 222);
             apps.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -1281,23 +1613,35 @@ namespace GameManagement
             workAppsList.HorizontalScrollbar = true;
             apps.Controls.Add(workAppsList);
 
-            Button add = RetroButton("Add app...", 92, 25);
+            Button add = RetroButton("Browse file...", 92, 25);
             add.Location = new Point(654, 23);
             add.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             add.Click += delegate { AddWorkApplication(); };
             apps.Controls.Add(add);
 
+            Button installed = RetroButton("Installed apps...", 92, 25);
+            installed.Location = new Point(654, 56);
+            installed.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            installed.Click += delegate { ChooseInstalledWorkApplication(); };
+            apps.Controls.Add(installed);
+
             Button remove = RetroButton("Remove", 92, 25);
-            remove.Location = new Point(654, 56);
+            remove.Location = new Point(654, 89);
             remove.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             remove.Click += delegate { RemoveWorkApplication(); };
             apps.Controls.Add(remove);
 
             Button save = RetroButton("Save apps", 92, 25);
-            save.Location = new Point(654, 89);
+            save.Location = new Point(654, 122);
             save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             save.Click += delegate { SaveWorkApplications(); };
             apps.Controls.Add(save);
+
+            Button launch = RetroButton("Launch selected", 92, 25);
+            launch.Location = new Point(654, 155);
+            launch.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            launch.Click += delegate { LaunchSelectedWorkApplication(); };
+            apps.Controls.Add(launch);
 
             Label note = MakeLabel("Only the exact .exe files selected here start Work Management. Gaming power and brightness settings are not used.", 13, 190);
             note.AutoSize = false;
@@ -1306,7 +1650,7 @@ namespace GameManagement
             apps.Controls.Add(note);
 
             workFooterLabel = new Label();
-            workFooterLabel.Text = "Choose Add app... to select a work application.";
+            workFooterLabel.Text = "Choose Installed apps... or Browse file... to select a work application.";
             workFooterLabel.BorderStyle = BorderStyle.Fixed3D;
             workFooterLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             workFooterLabel.Location = new Point(20, 515);
@@ -1315,10 +1659,39 @@ namespace GameManagement
             workSurface.Controls.Add(workFooterLabel);
 
             workModeFlipButton = RetroButton("Game mode", 108, 25);
-            workModeFlipButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            workModeFlipButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             workModeFlipButton.Click += delegate { FlipManagementMode(); };
             workSurface.Controls.Add(workModeFlipButton);
             workModeFlipButton.BringToFront();
+
+            Button weeklyReportButton = RetroButton("Weekly report", 108, 25);
+            weeklyReportButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            weeklyReportButton.Click += delegate { using (WeeklyReportForm report = new WeeklyReportForm(historyPath)) report.ShowDialog(this); };
+            workSurface.Controls.Add(weeklyReportButton);
+
+            GroupBox workTimerSettings = RetroGroup("Work timer", 20, 468, 764, 43);
+            workTimerSettings.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            workSurface.Controls.Add(workTimerSettings);
+            workTimerEnabledCheck = new CheckBox { Text = "On", Location = new Point(13, 18), AutoSize = true };
+            workTimerEnabledCheck.CheckedChanged += delegate
+            {
+                if (workTimerMinutesInput != null) workTimerMinutesInput.Enabled = workTimerEnabledCheck.Checked;
+                if (workBreakMinutesInput != null) workBreakMinutesInput.Enabled = workTimerEnabledCheck.Checked;
+            };
+            workTimerSettings.Controls.Add(workTimerEnabledCheck);
+            workTimerSettings.Controls.Add(MakeLabel("Work:", 75, 19));
+            workTimerMinutesInput = new NumericUpDown { Location = new Point(115, 16), Size = new Size(55, 21), Minimum = 1, Maximum = 240, TextAlign = HorizontalAlignment.Right };
+            workTimerSettings.Controls.Add(workTimerMinutesInput);
+            workTimerSettings.Controls.Add(MakeLabel("min", 175, 19));
+            workTimerSettings.Controls.Add(MakeLabel("Break:", 215, 19));
+            workBreakMinutesInput = new NumericUpDown { Location = new Point(260, 16), Size = new Size(55, 21), Minimum = 1, Maximum = 60, TextAlign = HorizontalAlignment.Right };
+            workTimerSettings.Controls.Add(workBreakMinutesInput);
+            workTimerSettings.Controls.Add(MakeLabel("min", 320, 19));
+            Button saveTimer = RetroButton("Save timer", 92, 25);
+            saveTimer.Location = new Point(654, 14);
+            saveTimer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            saveTimer.Click += delegate { if (SaveSettings()) workFooterLabel.Text = "Work timer saved."; };
+            workTimerSettings.Controls.Add(saveTimer);
 
             workSurface.Resize += delegate
             {
@@ -1337,12 +1710,31 @@ namespace GameManagement
                 remove.Width = actionWidth;
                 save.Left = actionLeft;
                 save.Width = actionWidth;
+                installed.Left = actionLeft;
+                installed.Width = actionWidth;
+                launch.Left = actionLeft;
+                launch.Width = actionWidth;
                 note.Width = apps.ClientSize.Width - (padding * 2);
+                workTimerSettings.Width = contentWidth;
+                saveTimer.Left = workTimerSettings.ClientSize.Width - padding - actionWidth;
+                saveTimer.Width = actionWidth;
                 workFooterLabel.Top = workSurface.ClientSize.Height - workFooterLabel.Height - 7;
                 workFooterLabel.Width = contentWidth;
                 workModeFlipButton.Left = workSurface.ClientSize.Width - contentMargin - workModeFlipButton.Width;
-                workModeFlipButton.Top = workFooterLabel.Top - workModeFlipButton.Height - 4;
+                workModeFlipButton.Top = 43;
+                weeklyReportButton.Left = workModeFlipButton.Left - weeklyReportButton.Width - 10;
+                weeklyReportButton.Top = workModeFlipButton.Top;
             };
+        }
+
+        private void AddWorkTimerRow(Control parent, string caption, int y, out Label value)
+        {
+            Label name = MakeLabel(caption, 390, y);
+            name.Size = new Size(100, 16);
+            parent.Controls.Add(name);
+            value = MakeLabel("Ready", 500, y);
+            value.Font = new Font(Font, FontStyle.Bold);
+            parent.Controls.Add(value);
         }
 
         private void AddWorkApplication()
@@ -1362,6 +1754,29 @@ namespace GameManagement
             }
         }
 
+        private void ChooseInstalledWorkApplication()
+        {
+            using (InstalledAppsForm picker = new InstalledAppsForm())
+            {
+                if (picker.ShowDialog(this) != DialogResult.OK || string.IsNullOrEmpty(picker.SelectedPath)) return;
+                if (!workAppsList.Items.Cast<object>().Any(item => string.Equals(item.ToString(), picker.SelectedPath, StringComparison.OrdinalIgnoreCase)))
+                    workAppsList.Items.Add(picker.SelectedPath);
+                workFooterLabel.Text = "Selection changed. Choose Save apps to apply it.";
+            }
+        }
+
+        private void LaunchSelectedWorkApplication()
+        {
+            string path = Convert.ToString(workAppsList.SelectedItem);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                RetroMessage("Select an available application first. Browse file... can add portable apps.", "Game Management");
+                return;
+            }
+            try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path) }); }
+            catch (Exception ex) { ShowError("The application could not be launched.\r\n\r\n" + ex.Message); }
+        }
+
         private void RemoveWorkApplication()
         {
             while (workAppsList.SelectedIndices.Count > 0)
@@ -1376,8 +1791,14 @@ namespace GameManagement
 
         private void FlipManagementMode()
         {
-            if (workspaceFlipTimer.Enabled) return;
+            if (workspaceFlipTimer.Enabled || modeSwitchInProgress) return;
             targetWorkView = !workView;
+            modeSwitchInProgress = true;
+            if (!SaveSettings(targetWorkView ? "work" : "game"))
+            {
+                modeSwitchInProgress = false;
+                return;
+            }
             workspaceFlipFrame = 0;
             workspaceFlipSurface = workView ? workSurface : gameSurface;
             workspaceFlipBounds = workspaceFlipSurface.Bounds;
@@ -1417,7 +1838,8 @@ namespace GameManagement
             workspaceFlipSurface.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             modeFlipButton.Enabled = true;
             workModeFlipButton.Enabled = true;
-            SaveSettings();
+            modeSwitchInProgress = false;
+            RefreshStatus();
             if (workView) RefreshWorkStatus();
         }
 
@@ -1451,10 +1873,8 @@ namespace GameManagement
         {
             if (!workView || settings == null) return;
             string[] running = GetRunningSelectedWorkApps();
-            workModeValue.Text = running.Length > 0 ? "WORK ACTIVE" : "Ready / monitoring";
-            workModeValue.ForeColor = running.Length > 0 ? Color.Green : Color.Black;
             SetLabelText(workAppsValue, running.Length > 0 ? string.Join(", ", running) : "None");
-            workElapsedValue.Text = "Ready";
+            workSessionStartedAt = null;
             try
             {
                 if (File.Exists(statePath))
@@ -1465,23 +1885,65 @@ namespace GameManagement
                     if (state.TryGetValue("Mode", out mode) && string.Equals(Convert.ToString(mode), "work", StringComparison.OrdinalIgnoreCase) && state.TryGetValue("ManagementStarted", out started))
                     {
                         DateTime began;
-                        if (DateTime.TryParse(Convert.ToString(started), out began))
-                            workElapsedValue.Text = FormatElapsed(DateTime.Now - began);
+                        if (DateTime.TryParse(Convert.ToString(started), null, System.Globalization.DateTimeStyles.RoundtripKind, out began))
+                            workSessionStartedAt = began.ToLocalTime();
                     }
                 }
             }
             catch { }
+            workModeValue.Text = workSessionStartedAt.HasValue ? "WORK ACTIVE" : "Ready / monitoring";
+            workModeValue.ForeColor = workSessionStartedAt.HasValue ? Color.Green : Color.Black;
+            RefreshWorkElapsedDisplay();
             workCpuValue.Text = cpuTemperatureValue == null ? "Unavailable" : cpuTemperatureValue.Text;
             workCpuValue.ForeColor = cpuTemperatureValue == null ? Color.DimGray : cpuTemperatureValue.ForeColor;
             workGpuValue.Text = gpuTemperatureValue == null ? "Unavailable" : gpuTemperatureValue.Text;
             workGpuValue.ForeColor = gpuTemperatureValue == null ? Color.DimGray : gpuTemperatureValue.ForeColor;
+            RefreshWorkTimerDisplay();
         }
 
-        private static string FormatElapsed(TimeSpan elapsed)
+        private void RefreshWorkTimerDisplay()
         {
-            if (elapsed.TotalHours >= 1) return ((int)elapsed.TotalHours) + " hr " + elapsed.Minutes + " min";
-            if (elapsed.TotalMinutes >= 1) return ((int)elapsed.TotalMinutes) + " min " + elapsed.Seconds + " sec";
-            return Math.Max(0, (int)elapsed.TotalSeconds) + " sec";
+            if (workTimerPhaseValue == null || settings == null) return;
+            if (!settings.workTimerEnabled)
+            {
+                SetLabelText(workTimerPhaseValue, "Off");
+                SetLabelText(workMinutesLeftValue, "--:--");
+                SetLabelText(workCycleValue, "0");
+                return;
+            }
+            if (!workSessionStartedAt.HasValue || !File.Exists(workTimerStatePath))
+            {
+                SetLabelText(workTimerPhaseValue, workSessionStartedAt.HasValue ? "Starting" : "Ready");
+                SetLabelText(workMinutesLeftValue, settings.workTimerMinutes.ToString("00") + ":00");
+                SetLabelText(workCycleValue, workSessionStartedAt.HasValue ? "1" : "0");
+                return;
+            }
+            try
+            {
+                Dictionary<string, object> state = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(workTimerStatePath));
+                if (!string.Equals(Convert.ToString(state["Mode"]), "work", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException();
+                DateTime deadline = DateTime.Parse(Convert.ToString(state["Deadline"]), null, System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime();
+                int seconds = Math.Max(0, (int)Math.Ceiling((deadline - DateTime.Now).TotalSeconds));
+                SetLabelText(workTimerPhaseValue, Convert.ToString(state["Phase"]));
+                SetLabelText(workMinutesLeftValue, string.Format("{0:00}:{1:00}", seconds / 60, seconds % 60));
+                SetLabelText(workCycleValue, Convert.ToString(state["Cycle"]));
+            }
+            catch
+            {
+                SetLabelText(workTimerPhaseValue, "Unavailable");
+                SetLabelText(workMinutesLeftValue, "--:--");
+            }
+        }
+
+        private void RefreshWorkElapsedDisplay()
+        {
+            if (workElapsedValue == null) return;
+            TimeSpan elapsed = workSessionStartedAt.HasValue
+                ? DateTime.Now - workSessionStartedAt.Value
+                : TimeSpan.Zero;
+            if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+            int hours = Math.Max(0, (int)Math.Floor(elapsed.TotalHours));
+            SetLabelText(workElapsedValue, string.Format("{0:00}:{1:00}:{2:00}", hours, elapsed.Minutes, elapsed.Seconds));
         }
 
         private void InitializeUiSignals()
@@ -1545,6 +2007,12 @@ namespace GameManagement
 
         private void RefreshTemperatureMetrics()
         {
+            string currentSessionKey = GetRuntimeSessionKey();
+            if (!string.Equals(currentSessionKey, temperatureSessionKey, StringComparison.Ordinal))
+            {
+                ResetTemperaturePeaks();
+                temperatureSessionKey = currentSessionKey;
+            }
             if (!Visible && !File.Exists(statePath))
             {
                 if (File.Exists(performanceStatePath)) File.Delete(performanceStatePath);
@@ -1560,6 +2028,20 @@ namespace GameManagement
             SetTemperatureLabel(cpuTemperatureValue, cpuTemperature, peakCpuTemperature, true);
             SetTemperatureLabel(gpuTemperatureValue, gpuTemperature, peakGpuTemperature, false);
             WriteTemperatureSnapshot(cpuTemperature, gpuTemperature);
+        }
+
+        private string GetRuntimeSessionKey()
+        {
+            if (!File.Exists(statePath)) return null;
+            try
+            {
+                Dictionary<string, object> state = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(statePath));
+                object mode, started;
+                if (state.TryGetValue("Mode", out mode) && state.TryGetValue("ManagementStarted", out started))
+                    return Convert.ToString(mode) + "|" + Convert.ToString(started);
+            }
+            catch { }
+            return null;
         }
 
         private float? ReadCpuTemperature()
@@ -1896,6 +2378,7 @@ namespace GameManagement
                 Dictionary<string, object> settingsMap = json.Deserialize<Dictionary<string, object>>(settingsText);
                 if (!settingsMap.ContainsKey("gameTimerEnabled")) settings.gameTimerEnabled = true;
                 if (!settingsMap.ContainsKey("pauseGameWithEscape")) settings.pauseGameWithEscape = true;
+                if (!settingsMap.ContainsKey("workTimerEnabled")) settings.workTimerEnabled = true;
             }
             catch
             {
@@ -1906,6 +2389,9 @@ namespace GameManagement
                     gameTimerEnabled = true,
                     gameTimerMinutes = 30,
                     breakTimerMinutes = 5,
+                    workTimerEnabled = true,
+                    workTimerMinutes = 30,
+                    workBreakMinutes = 5,
                     pauseGameWithEscape = true,
                     gameFolders = new string[0],
                     excludedProcesses = new string[0],
@@ -1920,6 +2406,8 @@ namespace GameManagement
             if (!string.Equals(settings.activeMode, "work", StringComparison.OrdinalIgnoreCase)) settings.activeMode = "game";
             if (settings.gameTimerMinutes < 1) settings.gameTimerMinutes = 30;
             if (settings.breakTimerMinutes < 1) settings.breakTimerMinutes = 5;
+            if (settings.workTimerMinutes < 1) settings.workTimerMinutes = 30;
+            if (settings.workBreakMinutes < 1) settings.workBreakMinutes = 5;
             brightnessInput.Value = Math.Max(brightnessInput.Minimum, Math.Min(brightnessInput.Maximum, settings.gameBrightnessPercent));
             pollInput.Value = Math.Max(pollInput.Minimum, Math.Min(pollInput.Maximum, settings.pollSeconds));
             timerEnabledCheck.Checked = settings.gameTimerEnabled;
@@ -1927,6 +2415,11 @@ namespace GameManagement
             breakMinutesInput.Value = Math.Max(breakMinutesInput.Minimum, Math.Min(breakMinutesInput.Maximum, settings.breakTimerMinutes));
             timerMinutesInput.Enabled = timerEnabledCheck.Checked;
             breakMinutesInput.Enabled = timerEnabledCheck.Checked;
+            workTimerEnabledCheck.Checked = settings.workTimerEnabled;
+            workTimerMinutesInput.Value = Math.Max(workTimerMinutesInput.Minimum, Math.Min(workTimerMinutesInput.Maximum, settings.workTimerMinutes));
+            workBreakMinutesInput.Value = Math.Max(workBreakMinutesInput.Minimum, Math.Min(workBreakMinutesInput.Maximum, settings.workBreakMinutes));
+            workTimerMinutesInput.Enabled = settings.workTimerEnabled;
+            workBreakMinutesInput.Enabled = settings.workTimerEnabled;
             pauseWithEscapeCheck.Checked = settings.pauseGameWithEscape;
             foldersList.Items.Clear();
             foreach (string folder in settings.gameFolders) foldersList.Items.Add(folder);
@@ -1936,44 +2429,188 @@ namespace GameManagement
             UpdateTimerConfirmState();
         }
 
-        private bool SaveSettings()
+        private bool SaveSettings(string requestedMode = null)
         {
+            GameSettings previousSettings = settings;
+            string previousContents = null;
+            bool watcherStopped = false;
+            bool handoffRequested = false;
             try
             {
-                settings.pollSeconds = (int)pollInput.Value;
-                settings.gameBrightnessPercent = (int)brightnessInput.Value;
-                settings.gameTimerEnabled = timerEnabledCheck.Checked;
-                settings.gameTimerMinutes = (int)timerMinutesInput.Value;
-                settings.breakTimerMinutes = (int)breakMinutesInput.Value;
-                settings.pauseGameWithEscape = pauseWithEscapeCheck.Checked;
-                settings.gameFolders = foldersList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
-                settings.activeMode = workView ? "work" : "game";
-                settings.workApps = workAppsList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
-                string serialized = json.Serialize(settings);
-                File.WriteAllText(settingsPath, PrettyJson(serialized), new UTF8Encoding(false));
+                GameSettings next = json.Deserialize<GameSettings>(json.Serialize(settings));
+                next.pollSeconds = (int)pollInput.Value;
+                next.gameBrightnessPercent = (int)brightnessInput.Value;
+                next.gameTimerEnabled = timerEnabledCheck.Checked;
+                next.gameTimerMinutes = (int)timerMinutesInput.Value;
+                next.breakTimerMinutes = (int)breakMinutesInput.Value;
+                next.workTimerEnabled = workTimerEnabledCheck.Checked;
+                next.workTimerMinutes = (int)workTimerMinutesInput.Value;
+                next.workBreakMinutes = (int)workBreakMinutesInput.Value;
+                next.pauseGameWithEscape = pauseWithEscapeCheck.Checked;
+                next.gameFolders = foldersList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
+                next.activeMode = requestedMode ?? (workView ? "work" : "game");
+                next.workApps = workAppsList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
+                previousContents = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
                 bool wasRunning = IsWatcherRunning();
                 if (wasRunning)
                 {
-                    PauseGameManagement(false);
-                    EnableGameManagement(false);
+                    handoffRequested = true;
+                    StopWatcherForSettingsChange(previousSettings.activeMode);
+                    watcherStopped = true;
                 }
+                File.WriteAllText(settingsPath, PrettyJson(json.Serialize(next)), new UTF8Encoding(false));
+                if (wasRunning) StartWatcherAfterSettingsChange();
+                settings = next;
                 SetFooter(wasRunning ? "Settings saved; watcher restarted." : "Settings saved.");
                 UpdateTimerConfirmState();
-                RefreshStatus();
+                if (!modeSwitchInProgress) RefreshStatus();
                 return true;
             }
             catch (Exception ex)
             {
+                settings = previousSettings;
+                if (watcherStopped || handoffRequested)
+                {
+                    try
+                    {
+                        if (previousContents == null) File.Delete(settingsPath);
+                        else File.WriteAllText(settingsPath, previousContents, new UTF8Encoding(false));
+                        if (!IsWatcherRunning()) StartWatcherAfterSettingsChange();
+                        lastWatcherStartAttempt = DateTime.MinValue;
+                    }
+                    catch (Exception restoreEx)
+                    {
+                        ShowError("The previous watcher could not be restarted. Please use Enable after checking the log.\r\n\r\n" + restoreEx.Message);
+                    }
+                }
                 ShowError("Settings could not be saved.\r\n\r\n" + ex.Message);
                 return false;
             }
+        }
+
+        private void StopWatcherForSettingsChange(string oldMode)
+        {
+            string requestPath = Path.Combine(rootPath, "mode-switch-request.json");
+            string ackPath = Path.Combine(rootPath, "mode-switch-ack.json");
+            string requestId = Guid.NewGuid().ToString("N");
+            string temporaryRequestPath = Path.Combine(rootPath, "mode-switch-request." + requestId + ".tmp");
+            int timeoutMs = Math.Max(15000, (Math.Max(2, settings.pollSeconds) + 8) * 1000);
+            int requesterPid;
+            long requesterStartTicks;
+            using (Process requester = Process.GetCurrentProcess())
+            {
+                requesterPid = requester.Id;
+                requesterStartTicks = requester.StartTime.ToUniversalTime().Ticks;
+            }
+            if (File.Exists(ackPath)) File.Delete(ackPath);
+            bool finished = false;
+            bool canceled = false;
+            try
+            {
+                File.WriteAllText(temporaryRequestPath, json.Serialize(new
+                {
+                    RequestId = requestId,
+                    Mode = oldMode,
+                    RequesterPid = requesterPid,
+                    RequesterStartTicks = requesterStartTicks,
+                    ExpiresUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs + 60000).ToString("o")
+                }), new UTF8Encoding(false));
+                using (System.Threading.Mutex transitionMutex = new System.Threading.Mutex(false, @"Local\GameManagementTransition_v1"))
+                {
+                    try { transitionMutex.WaitOne(); }
+                    catch (System.Threading.AbandonedMutexException) { }
+                    try
+                    {
+                        if (File.Exists(requestPath)) File.Delete(requestPath);
+                        File.Move(temporaryRequestPath, requestPath);
+                    }
+                    finally { transitionMutex.ReleaseMutex(); }
+                }
+                Stopwatch wait = Stopwatch.StartNew();
+                while (wait.ElapsedMilliseconds < timeoutMs)
+                {
+                    if (IsMatchingModeSwitchAck(ackPath, requestId, oldMode) && !IsWatcherRunning())
+                    {
+                        finished = true;
+                        return;
+                    }
+                    System.Threading.Thread.Sleep(100);
+                }
+                bool acknowledged;
+                using (System.Threading.Mutex transitionMutex = new System.Threading.Mutex(false, @"Local\GameManagementTransition_v1"))
+                {
+                    try { transitionMutex.WaitOne(); }
+                    catch (System.Threading.AbandonedMutexException) { }
+                    try
+                    {
+                        acknowledged = IsMatchingModeSwitchAck(ackPath, requestId, oldMode);
+                        if (!acknowledged)
+                        {
+                            if (File.Exists(requestPath)) File.Delete(requestPath);
+                            canceled = true;
+                        }
+                    }
+                    finally { transitionMutex.ReleaseMutex(); }
+                }
+                if (!acknowledged)
+                    throw new TimeoutException("The running session did not finish its handoff. No settings were changed.");
+                Stopwatch releaseWait = Stopwatch.StartNew();
+                while (releaseWait.ElapsedMilliseconds < 30000)
+                {
+                    if (!IsWatcherRunning())
+                    {
+                        finished = true;
+                        return;
+                    }
+                    System.Threading.Thread.Sleep(100);
+                }
+                throw new TimeoutException("The session was saved, but the watcher has not exited. Check its status before retrying.");
+            }
+            finally
+            {
+                if (File.Exists(temporaryRequestPath)) File.Delete(temporaryRequestPath);
+                if (finished || canceled)
+                {
+                    if (File.Exists(requestPath)) File.Delete(requestPath);
+                    if (File.Exists(ackPath)) File.Delete(ackPath);
+                }
+            }
+        }
+
+        private bool IsMatchingModeSwitchAck(string ackPath, string requestId, string oldMode)
+        {
+            try
+            {
+                if (!File.Exists(ackPath)) return false;
+                Dictionary<string, object> ack = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(ackPath));
+                object id, mode, saved;
+                return ack.TryGetValue("RequestId", out id) &&
+                    ack.TryGetValue("Mode", out mode) &&
+                    ack.TryGetValue("Saved", out saved) &&
+                    string.Equals(Convert.ToString(id), requestId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(Convert.ToString(mode), oldMode, StringComparison.OrdinalIgnoreCase) &&
+                    Convert.ToBoolean(saved);
+            }
+            catch { return false; }
+        }
+
+        private void StartWatcherAfterSettingsChange()
+        {
+            RunPowerShell(watcherPath, false);
+            Stopwatch wait = Stopwatch.StartNew();
+            while (wait.ElapsedMilliseconds < 10000)
+            {
+                if (IsWatcherRunning()) return;
+                System.Threading.Thread.Sleep(100);
+            }
+            throw new TimeoutException("The watcher did not restart within 10 seconds.");
         }
 
         private void ConfirmTimerSettings()
         {
             if (!SaveSettings()) return;
             SetFooter("Timer confirmed: " + timerMinutesInput.Value + "-minute game / " + breakMinutesInput.Value + "-minute break.");
-            RefreshTimerDisplay(File.Exists(statePath) || File.Exists(timerStatePath));
+            RefreshTimerDisplay(IsRuntimeMode("game"));
         }
 
         private void UpdateTimerConfirmState()
@@ -2096,14 +2733,7 @@ namespace GameManagement
             {
                 try
                 {
-                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
-                    {
-                        if (key != null)
-                        {
-                            key.DeleteValue("GameManagementEngine", false);
-                            key.DeleteValue("CodexGameManagement", false);
-                        }
-                    }
+                    RemoveRunEntry();
                     SetFooter("Windows sign-in startup disabled; current watcher left running.");
                 }
                 catch (Exception ex) { ShowError("Startup setting could not be changed.\r\n\r\n" + ex.Message); }
@@ -2113,10 +2743,21 @@ namespace GameManagement
 
         private void EnsureRunEntry()
         {
-            string command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + watcherPath + "\"";
+            string applicationPath = Path.Combine(rootPath, "GameManagement.exe");
+            string command = "\"" + applicationPath + "\" --ui-start-hidden";
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
             {
                 key.SetValue("GameManagementEngine", command, RegistryValueKind.String);
+                key.DeleteValue("CodexGameManagement", false);
+            }
+        }
+
+        private void RemoveRunEntry()
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+            {
+                if (key == null) return;
+                key.DeleteValue("GameManagementEngine", false);
                 key.DeleteValue("CodexGameManagement", false);
             }
         }
@@ -2140,7 +2781,7 @@ namespace GameManagement
 
         private void RefreshStatus()
         {
-            if (IsDisposed || !IsHandleCreated) return;
+            if (IsDisposed || !IsHandleCreated || modeSwitchInProgress) return;
             try
             {
                 bool watcher = IsWatcherRunning();
@@ -2151,7 +2792,9 @@ namespace GameManagement
                     RunPowerShell(watcherPath, false);
                     SetFooter("Restarting the Game Management watcher...");
                 }
-                bool stateActive = File.Exists(statePath);
+                string runtimeMode = GetRuntimeMode();
+                bool stateActive = runtimeMode != null;
+                bool gameStateActive = string.Equals(runtimeMode, "game", StringComparison.OrdinalIgnoreCase);
                 if (!Visible)
                 {
                     TrackManagementState(stateActive);
@@ -2160,8 +2803,10 @@ namespace GameManagement
                 }
                 string activeSchemeOutput = RunCapture("powercfg.exe", "/getactivescheme");
                 string activeSchemeGuid = GetActiveSchemeGuid(activeSchemeOutput);
-                bool managed = stateActive || activeSchemeGuid == ManagementPlanGuid;
-                TrackManagementState(managed);
+                bool managed = gameStateActive || (runtimeMode == null &&
+                    string.Equals(settings.activeMode, "game", StringComparison.OrdinalIgnoreCase) &&
+                    activeSchemeGuid == ManagementPlanGuid);
+                TrackManagementState(stateActive || managed);
                 string activePlan = GetActiveSchemeName(activeSchemeOutput, activeSchemeGuid);
                 string game = GetActiveGameFromLog(managed);
                 int? brightness = GetBrightness();
@@ -2185,6 +2830,29 @@ namespace GameManagement
             {
                 SetFooter("Status refresh warning: " + ex.Message);
             }
+        }
+
+        private string GetRuntimeMode()
+        {
+            if (!File.Exists(statePath)) return null;
+            try
+            {
+                Dictionary<string, object> state = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(statePath));
+                object mode;
+                if (state.TryGetValue("Mode", out mode))
+                {
+                    string value = Convert.ToString(mode);
+                    if (string.Equals(value, "work", StringComparison.OrdinalIgnoreCase)) return "work";
+                    if (string.Equals(value, "game", StringComparison.OrdinalIgnoreCase)) return "game";
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private bool IsRuntimeMode(string mode)
+        {
+            return string.Equals(GetRuntimeMode(), mode, StringComparison.OrdinalIgnoreCase);
         }
 
         private bool IsWatcherRunning()
@@ -2317,6 +2985,13 @@ namespace GameManagement
             try
             {
                 Dictionary<string, object> timerState = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(timerStatePath));
+                object timerMode;
+                if (!timerState.TryGetValue("Mode", out timerMode) ||
+                    !string.Equals(Convert.ToString(timerMode), "game", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshTimerDisplay(false);
+                    return;
+                }
                 object deadlineValue;
                 if (!timerState.TryGetValue("Deadline", out deadlineValue)) throw new InvalidDataException();
                 object phaseValue;

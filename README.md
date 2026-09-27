@@ -27,6 +27,11 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 - Taskbar and notification-area controls
 - Low-overhead idle tray mode with full one-second temperature monitoring during games
 - Activity log hidden on startup and available through Show activity
+- Configurable single-instance launch at Windows sign-in
+- Live timestamp-based `HH:MM:SS` Work Mode session timer
+- Independent Work focus and break timer settings and state; Game timer settings remain separate
+- Installed-application picker with recognizable names and icons, plus the original executable browser
+- Weekly Report with separate Game and Work totals, daily activity, and single-app time when recorded
 - Animated Windows 98-style pixel-gerbera panel
 - Single-file graphical installer and registered uninstall support
 
@@ -58,10 +63,10 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v2.1.0 package was verified on September 15, 2026 before publication. The Game and Work tiles, exact-path work-app selection, AC-only guard, timer-only alarm flow, two-minute history cutoff, installer payload, and state restoration passed the current safety suite. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
+The v2.3.1 package was checked on September 27, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic mode switching, installed-app discovery, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **42/42 checks passed**
+- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **47/47 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)

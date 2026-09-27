@@ -3,6 +3,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backupPath = Join-Path $root 'install-backup.json'
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
+$workTimerStatePath = Join-Path $root 'work-timer-state.json'
 $engineEnabledPath = Join-Path $root 'engine-enabled.flag'
 $managementPlanGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
 $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
@@ -71,5 +72,5 @@ if ($backup -and $backup.RunExisted) {
 }
 
 powercfg /delete $managementPlanGuid | Out-Null
-Remove-Item -LiteralPath $statePath,$timerStatePath,$engineEnabledPath,$backupPath -Force
+Remove-Item -LiteralPath $statePath,$timerStatePath,$workTimerStatePath,$engineEnabledPath,$backupPath -Force
 Write-Host 'Game Management was removed and the captured Windows settings were restored.' -ForegroundColor Green

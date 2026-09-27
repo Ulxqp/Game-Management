@@ -12,8 +12,8 @@ Double-click GameManagement.exe.
 INSTALLER
 ---------
 Run GameManagement-Setup.exe to install or upgrade the application. Setup
-preserves existing settings, creates Desktop and Start Menu shortcuts, starts
-the background watcher, and adds Game Management to Windows Installed Apps.
+preserves existing settings and startup/paused choices, creates Desktop and
+Start Menu shortcuts, and adds Game Management to Windows Installed Apps.
 Uninstalling safely restores captured Windows settings and keeps the settings
 and activity log in Documents\GameManagement.
 
@@ -36,6 +36,7 @@ Pause          Stops the watcher, restores captured system settings, and
                disables sign-in startup without deleting the power plan.
 Save settings  Saves brightness, scan interval, and game-library folders.
 Add            Adds a launcher or standalone game-library folder.
+Start at login Launches one hidden Game Management instance when you sign in.
 Game Management does not change game process priority.
 
 GAME TIMER
@@ -58,8 +59,8 @@ the main interface. The main interface itself is unchanged.
 
 BREAK CONTROL
 -------------
-The Press Escape option is enabled by default. At break start, Hardware
-Squisher finds the detected game's real window, brings that window forward,
+The Press Escape option is enabled by default. At break start, Game Management
+finds the detected game's real window, brings that window forward,
 checks that it truly has focus, and only then presses Escape. The main
 interface appears with the break countdown. At break end, the same safe check
 presses Escape again and the main interface hides to the notification area.
@@ -108,3 +109,16 @@ exact .exe files you want Work Management to monitor, such as Code.exe,
 eclipse.exe, or chrome.exe, then choose Save apps. Selected work apps use the
 focus and break timer but do not activate gaming power, brightness, or Escape
 behavior. Choose Game mode to flip back.
+
+Session time shows the current Work session as HH:MM:SS. It is calculated from
+the shared session start time instead of adding one second per screen refresh,
+so a busy or minimized interface does not make the displayed time drift.
+
+Work has its own focus and break durations and its own timer-state file. The
+Game timer settings and state remain separate. Choose Installed apps... for
+launchable Windows applications, or Browse file... for a portable application
+or an app that Windows does not list. Launch selected starts the highlighted
+executable. Weekly report summarizes saved sessions by day and mode, including
+sessions that cross midnight. App time is shown only when one app was recorded
+for a session. Sessions lasting two minutes or less remain excluded from the
+saved history, as in earlier versions.

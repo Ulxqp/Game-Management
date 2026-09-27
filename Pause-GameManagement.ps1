@@ -2,6 +2,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
+$workTimerStatePath = Join-Path $root 'work-timer-state.json'
 $engineEnabledPath = Join-Path $root 'engine-enabled.flag'
 $logPath = Join-Path $root 'GameManagement.log'
 $balancedGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
@@ -61,6 +62,7 @@ if ($state -and $null -ne $state.OriginalBrightness) {
 if ($state) { Restore-SavedPriorities @($state.OriginalPriorities) }
 Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $workTimerStatePath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $engineEnabledPath -Force -ErrorAction SilentlyContinue
 Remove-ItemProperty -LiteralPath $runKey -Name 'GameManagementEngine' -Force -ErrorAction SilentlyContinue
 Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameManagement' -Force -ErrorAction SilentlyContinue

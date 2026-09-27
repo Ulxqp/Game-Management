@@ -5,6 +5,8 @@ $managementPlanGuid = 'c8b1a303-89f5-4b03-ae3f-10b46a186527'
 $highGuid = 'aa5b4fa5-cac4-4211-b1d5-a151db2f975e'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runName = 'GameManagementEngine'
+$isUpgrade = Test-Path -LiteralPath $backupPath
+$startupWasEnabled = $null -ne (Get-ItemProperty -LiteralPath $runKey -Name $runName -ErrorAction SilentlyContinue).$runName
 
 function Invoke-PowerCfg([string[]]$Arguments) {
     & powercfg.exe @Arguments | Out-Null
@@ -58,7 +60,8 @@ if (-not (Test-Path -LiteralPath $backupPath)) {
 }
 
 $watcher = Join-Path $root 'GameManagement.ps1'
-$command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watcher`""
+$application = Join-Path $root 'GameManagement.exe'
+$command = "`"$application`" --ui-start-hidden"
 $watcherPattern = [regex]::Escape($watcher)
 $watchers = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
@@ -70,7 +73,9 @@ foreach ($runningWatcher in $watchers) { Stop-Process -Id $runningWatcher.Proces
 
 $statePath = Join-Path $root 'runtime-state.json'
 $timerStatePath = Join-Path $root 'timer-state.json'
+$workTimerStatePath = Join-Path $root 'work-timer-state.json'
 $engineEnabledPath = Join-Path $root 'engine-enabled.flag'
+$engineWasEnabled = Test-Path -LiteralPath $engineEnabledPath
 $legacyPriorityFlagPath = Join-Path $root 'priority-disabled.flag'
 $runtimeState = $null
 if (Test-Path -LiteralPath $statePath) {
@@ -95,6 +100,7 @@ if ($runtimeState) { Restore-SavedPriorities @($runtimeState.OriginalPriorities)
 Remove-Item -LiteralPath $legacyPriorityFlagPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $workTimerStatePath -Force -ErrorAction SilentlyContinue
 
 $existingPlans = powercfg /list
 if (($existingPlans -join "`n") -notmatch [regex]::Escape($managementPlanGuid)) {
@@ -126,10 +132,19 @@ Add-Content -LiteralPath $compatibilityPath -Encoding UTF8 -Value @(
 )
 
 New-Item -Path $runKey -Force | Out-Null
-New-ItemProperty -LiteralPath $runKey -Name $runName -Value $command -PropertyType String -Force | Out-Null
+if (-not $isUpgrade -or $startupWasEnabled) {
+    New-ItemProperty -LiteralPath $runKey -Name $runName -Value $command -PropertyType String -Force | Out-Null
+} else {
+    Remove-ItemProperty -LiteralPath $runKey -Name $runName -Force -ErrorAction SilentlyContinue
+}
 Remove-ItemProperty -LiteralPath $runKey -Name 'CodexGameManagement' -Force -ErrorAction SilentlyContinue
-Set-Content -LiteralPath $engineEnabledPath -Value 'enabled' -Encoding ASCII
-Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$watcher)
-Start-Sleep -Seconds 1
-Write-Host 'Game Management installed and running with normal user permissions.' -ForegroundColor Green
+if (-not $isUpgrade -or $engineWasEnabled) {
+    Set-Content -LiteralPath $engineEnabledPath -Value 'enabled' -Encoding ASCII
+    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$watcher)
+    Start-Sleep -Seconds 1
+    Write-Host 'Game Management installed and running with normal user permissions.' -ForegroundColor Green
+} else {
+    Remove-Item -LiteralPath $engineEnabledPath -Force -ErrorAction SilentlyContinue
+    Write-Host 'Game Management installed; the watcher remains paused.' -ForegroundColor Green
+}
 Write-Host 'GPU clocks, drivers, firmware, and vendor performance modes remain untouched.'
