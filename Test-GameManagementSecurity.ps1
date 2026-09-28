@@ -195,6 +195,16 @@ Add-Check 'Installed app selection retains file browse' (
     $appSource -match 'OpenFileDialog' -and
     $appSource -match 'LaunchSelectedWorkApplication'
 ) 'Installed apps can be chosen and launched; the existing executable picker remains available.'
+Add-Check 'Game installed-app detection uses exact paths' (
+    $appSource -match 'gameApps' -and
+    $appSource -match 'ChooseInstalledGameApplication' -and
+    $appSource -match 'BrowseGameApplication' -and
+    $appSource -match '\[App\]' -and
+    $appSource -match '\[Folder\]' -and
+    $watcher -match 'function Get-GameApplications' -and
+    $watcher -match 'Find-RunningGames\(\$folders, \$selectedPaths, \$excluded\)' -and
+    $watcher -match '\$selected\.Contains\(\$path\)'
+) 'Game Mode can select installed or manually browsed executables by exact path while retaining folder detection.'
 Add-Check 'Weekly report from existing session history' (
     $appSource -match 'internal static class WeeklyReport' -and
     $appSource -match 'GameSessionHistory\.txt' -and

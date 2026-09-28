@@ -489,6 +489,7 @@ namespace GameManagement
         public int workTimerMinutes { get; set; }
         public int workBreakMinutes { get; set; }
         public bool pauseGameWithEscape { get; set; }
+        public string[] gameApps { get; set; }
         public string[] gameFolders { get; set; }
         public string[] excludedProcesses { get; set; }
         public string activeMode { get; set; }
@@ -700,6 +701,23 @@ namespace GameManagement
     {
         public string Name;
         public string Path;
+    }
+
+    internal sealed class GameDetectionTarget
+    {
+        public string Path { get; private set; }
+        public bool IsApplication { get; private set; }
+
+        public GameDetectionTarget(string path, bool isApplication)
+        {
+            Path = path;
+            IsApplication = isApplication;
+        }
+
+        public override string ToString()
+        {
+            return (IsApplication ? "[App] " : "[Folder] ") + Path;
+        }
     }
 
     internal sealed class InstalledAppsForm : RetroDialogForm
@@ -1402,7 +1420,7 @@ namespace GameManagement
             pauseWithEscapeCheck.AutoSize = true;
             settingsGroup.Controls.Add(pauseWithEscapeCheck);
 
-            GroupBox foldersGroup = RetroGroup("Game library folders", 20, 330, 764, 142);
+            GroupBox foldersGroup = RetroGroup("Detected game apps and library folders", 20, 330, 764, 142);
             foldersGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             gameSurface.Controls.Add(foldersGroup);
             Button gameReportButton = RetroButton("Weekly report", 108, 25);
@@ -1417,20 +1435,32 @@ namespace GameManagement
             foldersList.HorizontalScrollbar = true;
             foldersGroup.Controls.Add(foldersList);
 
-            Button addFolder = RetroButton("Add...", 92, 25);
-            addFolder.Location = new Point(654, 23);
+            Button installedGame = RetroButton("Installed apps...", 108, 25);
+            installedGame.Location = new Point(534, 23);
+            installedGame.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            installedGame.Click += delegate { ChooseInstalledGameApplication(); };
+            foldersGroup.Controls.Add(installedGame);
+
+            Button browseGame = RetroButton("Browse file...", 108, 25);
+            browseGame.Location = new Point(654, 23);
+            browseGame.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            browseGame.Click += delegate { BrowseGameApplication(); };
+            foldersGroup.Controls.Add(browseGame);
+
+            Button addFolder = RetroButton("Add folder...", 108, 25);
+            addFolder.Location = new Point(534, 56);
             addFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             addFolder.Click += delegate { AddFolder(); };
             foldersGroup.Controls.Add(addFolder);
 
-            Button removeFolder = RetroButton("Remove", 92, 25);
+            Button removeFolder = RetroButton("Remove", 108, 25);
             removeFolder.Location = new Point(654, 56);
             removeFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             removeFolder.Click += delegate { RemoveFolder(); };
             foldersGroup.Controls.Add(removeFolder);
 
-            Button saveButton = RetroButton("Save settings", 92, 25);
-            saveButton.Location = new Point(654, 89);
+            Button saveButton = RetroButton("Save settings", 228, 25);
+            saveButton.Location = new Point(534, 89);
             saveButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             saveButton.Click += delegate { SaveSettings(); };
             foldersGroup.Controls.Add(saveButton);
@@ -1522,15 +1552,20 @@ namespace GameManagement
 
                 int folderPadding = 13;
                 int folderGap = 10;
-                int folderActionWidth = Math.Max(92, Math.Min(130, foldersGroup.ClientSize.Width / 7));
-                int folderActionLeft = foldersGroup.ClientSize.Width - folderPadding - folderActionWidth;
+                int folderActionWidth = Math.Max(92, Math.Min(120, foldersGroup.ClientSize.Width / 7));
+                int folderButtonGap = 8;
+                int folderActionLeft = foldersGroup.ClientSize.Width - folderPadding - (folderActionWidth * 2) - folderButtonGap;
                 foldersList.Width = Math.Max(220, folderActionLeft - foldersList.Left - folderGap);
+                installedGame.Left = folderActionLeft;
+                installedGame.Width = folderActionWidth;
+                browseGame.Left = installedGame.Right + folderButtonGap;
+                browseGame.Width = folderActionWidth;
                 addFolder.Left = folderActionLeft;
                 addFolder.Width = folderActionWidth;
-                removeFolder.Left = folderActionLeft;
+                removeFolder.Left = addFolder.Right + folderButtonGap;
                 removeFolder.Width = folderActionWidth;
                 saveButton.Left = folderActionLeft;
-                saveButton.Width = folderActionWidth;
+                saveButton.Width = (folderActionWidth * 2) + folderButtonGap;
 
                 footerLabel.Top = body.ClientSize.Height - footerLabel.Height - 7;
                 footerLabel.Width = contentWidth;
@@ -2393,6 +2428,7 @@ namespace GameManagement
                     workTimerMinutes = 30,
                     workBreakMinutes = 5,
                     pauseGameWithEscape = true,
+                    gameApps = new string[0],
                     gameFolders = new string[0],
                     excludedProcesses = new string[0],
                     activeMode = "game",
@@ -2400,6 +2436,7 @@ namespace GameManagement
                 };
             }
 
+            if (settings.gameApps == null) settings.gameApps = new string[0];
             if (settings.gameFolders == null) settings.gameFolders = new string[0];
             if (settings.excludedProcesses == null) settings.excludedProcesses = new string[0];
             if (settings.workApps == null) settings.workApps = new string[0];
@@ -2422,7 +2459,8 @@ namespace GameManagement
             workBreakMinutesInput.Enabled = settings.workTimerEnabled;
             pauseWithEscapeCheck.Checked = settings.pauseGameWithEscape;
             foldersList.Items.Clear();
-            foreach (string folder in settings.gameFolders) foldersList.Items.Add(folder);
+            foreach (string app in settings.gameApps) foldersList.Items.Add(new GameDetectionTarget(app, true));
+            foreach (string folder in settings.gameFolders) foldersList.Items.Add(new GameDetectionTarget(folder, false));
             workAppsList.Items.Clear();
             foreach (string app in settings.workApps) workAppsList.Items.Add(app);
             ShowManagementMode(string.Equals(settings.activeMode, "work", StringComparison.OrdinalIgnoreCase));
@@ -2447,7 +2485,9 @@ namespace GameManagement
                 next.workTimerMinutes = (int)workTimerMinutesInput.Value;
                 next.workBreakMinutes = (int)workBreakMinutesInput.Value;
                 next.pauseGameWithEscape = pauseWithEscapeCheck.Checked;
-                next.gameFolders = foldersList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
+                GameDetectionTarget[] gameTargets = foldersList.Items.Cast<object>().OfType<GameDetectionTarget>().ToArray();
+                next.gameApps = gameTargets.Where(item => item.IsApplication).Select(item => item.Path).ToArray();
+                next.gameFolders = gameTargets.Where(item => !item.IsApplication).Select(item => item.Path).ToArray();
                 next.activeMode = requestedMode ?? (workView ? "work" : "game");
                 next.workApps = workAppsList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
                 previousContents = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
@@ -2658,6 +2698,36 @@ namespace GameManagement
             return output.ToString();
         }
 
+        private void ChooseInstalledGameApplication()
+        {
+            using (InstalledAppsForm picker = new InstalledAppsForm())
+            {
+                if (picker.ShowDialog(this) != DialogResult.OK || string.IsNullOrEmpty(picker.SelectedPath)) return;
+                AddGameDetectionTarget(picker.SelectedPath, true);
+            }
+        }
+
+        private void BrowseGameApplication()
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Choose a game application";
+                dialog.Filter = "Applications (*.exe)|*.exe";
+                dialog.Multiselect = true;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                foreach (string path in dialog.FileNames) AddGameDetectionTarget(path, true);
+            }
+        }
+
+        private void AddGameDetectionTarget(string path, bool isApplication)
+        {
+            string selected = isApplication ? Path.GetFullPath(path) : path.TrimEnd(Path.DirectorySeparatorChar);
+            bool exists = foldersList.Items.Cast<object>().OfType<GameDetectionTarget>()
+                .Any(item => string.Equals(item.Path, selected, StringComparison.OrdinalIgnoreCase));
+            if (!exists) foldersList.Items.Add(new GameDetectionTarget(selected, isApplication));
+            SetFooter("Game detection changed. Choose Save settings to apply it.");
+        }
+
         private void AddFolder()
         {
             using (FolderBrowserDialog dialog = new FolderBrowserDialog())
@@ -2665,15 +2735,17 @@ namespace GameManagement
                 dialog.Description = "Select a game-library folder. Every game installed below it will be detected.";
                 dialog.ShowNewFolderButton = false;
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                string selected = dialog.SelectedPath.TrimEnd(Path.DirectorySeparatorChar);
-                bool exists = foldersList.Items.Cast<object>().Any(item => string.Equals(item.ToString(), selected, StringComparison.OrdinalIgnoreCase));
-                if (!exists) foldersList.Items.Add(selected);
+                AddGameDetectionTarget(dialog.SelectedPath, false);
             }
         }
 
         private void RemoveFolder()
         {
-            if (foldersList.SelectedIndex >= 0) foldersList.Items.RemoveAt(foldersList.SelectedIndex);
+            if (foldersList.SelectedIndex >= 0)
+            {
+                foldersList.Items.RemoveAt(foldersList.SelectedIndex);
+                SetFooter("Game detection changed. Choose Save settings to apply it.");
+            }
         }
 
         private void EnableGameManagement()

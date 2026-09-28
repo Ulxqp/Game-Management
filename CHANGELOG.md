@@ -1,5 +1,11 @@
 # Game Management changelog
 
+## 2.3.2 — 2026-09-28
+
+- Added the installed-application picker to Game Mode, alongside Browse file and Add folder.
+- Selected Game applications are matched by exact executable path, while existing library-folder and automatic Steam detection continue to work.
+- Game Mode shows selected applications and folders together with clear `[App]` and `[Folder]` labels.
+
 ## 2.3.1 — 2026-09-27
 
 - Switching between Work and Game now asks the outgoing watcher to finish and save its active session before the new mode starts. A failed handoff keeps the old mode and settings.

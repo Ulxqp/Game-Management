@@ -8,7 +8,7 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 
 ## Features
 
-- Automatic game detection across configured folders and Steam libraries
+- Automatic game detection across selected installed applications, configured folders, and Steam libraries
 - Whole-interface flip between Game Management and Work Management
 - Exact executable picker for user-selected work applications such as VS Code, Eclipse, or Chrome
 - Work focus sessions that do not apply gaming power, brightness, or Escape behavior
@@ -30,7 +30,7 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 - Configurable single-instance launch at Windows sign-in
 - Live timestamp-based `HH:MM:SS` Work Mode session timer
 - Independent Work focus and break timer settings and state; Game timer settings remain separate
-- Installed-application picker with recognizable names and icons, plus the original executable browser
+- Installed-application picker with recognizable names and icons in both Game and Work modes, plus manual executable browsing
 - Weekly Report with separate Game and Work totals, daily activity, and single-app time when recorded
 - Animated Windows 98-style pixel-gerbera panel
 - Single-file graphical installer and registered uninstall support
@@ -63,10 +63,10 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v2.3.1 package was checked on September 27, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic mode switching, installed-app discovery, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
+The v2.3.2 package was checked on September 28, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic mode switching, installed-app discovery in both modes, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **47/47 checks passed**
+- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **48/48 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)

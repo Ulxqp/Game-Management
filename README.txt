@@ -34,8 +34,10 @@ CONTROLS
 Enable         Installs/starts Game Management and enables sign-in startup.
 Pause          Stops the watcher, restores captured system settings, and
                disables sign-in startup without deleting the power plan.
-Save settings  Saves brightness, scan interval, and game-library folders.
-Add            Adds a launcher or standalone game-library folder.
+Save settings  Saves brightness, scan interval, selected game apps, and folders.
+Installed apps Adds a detected installed application by its exact executable.
+Browse file    Adds a portable or otherwise unlisted game executable.
+Add folder     Adds a launcher or standalone game-library folder.
 Start at login Launches one hidden Game Management instance when you sign in.
 Game Management does not change game process priority.
 

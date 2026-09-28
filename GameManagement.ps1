@@ -390,7 +390,22 @@ function Get-GameFolders($config) {
     return @($folders)
 }
 
-function Find-RunningGames($folders, $excluded) {
+function Get-GameApplications($config) {
+    $applications = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($application in @($config.gameApps)) {
+        try {
+            $fullPath = [IO.Path]::GetFullPath([string]$application)
+            if (Test-Path -LiteralPath $fullPath -PathType Leaf) { [void]$applications.Add($fullPath) }
+        } catch {}
+    }
+    return @($applications)
+}
+
+function Find-RunningGames($folders, $selectedPaths, $excluded) {
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($selectedPath in @($selectedPaths)) {
+        try { [void]$selected.Add([IO.Path]::GetFullPath([string]$selectedPath)) } catch {}
+    }
     $matches = [Collections.Generic.List[object]]::new()
     $seenProcessIds = [Collections.Generic.HashSet[int]]::new()
     foreach ($process in @(Get-Process)) {
@@ -405,8 +420,10 @@ function Find-RunningGames($folders, $excluded) {
             if ($null -ne $cached -and $cached.ProcessName -eq $processName -and $cached.StartTicks -eq $startTicks) {
                 $isGame = [bool]$cached.IsGame
             } else {
-                if (-not $excluded.Contains($processName)) {
-                    $path = [IO.Path]::GetFullPath([string]$process.Path)
+                $path = [IO.Path]::GetFullPath([string]$process.Path)
+                if ($path -and $selected.Contains($path)) {
+                    $isGame = $true
+                } elseif (-not $excluded.Contains($processName)) {
                     if ($path) {
                         foreach ($folder in $folders) {
                             if ($path.StartsWith([string]$folder, [StringComparison]::OrdinalIgnoreCase)) {
@@ -583,13 +600,14 @@ try {
     }
     Update-IdleBrightness $true
     $folders = Get-GameFolders $config
+    $gameApplications = Get-GameApplications $config
     $excluded = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($processName in @($config.excludedProcesses) + @('crash_reporter','crashreporter')) {
         if (-not [string]::IsNullOrWhiteSpace([string]$processName)) { [void]$excluded.Add([string]$processName) }
     }
     $cachedBrightnessText = if ($null -eq $script:lastIdleBrightness) { 'unavailable' } else { "$script:lastIdleBrightness%" }
     $workApps = @($config.workApps)
-    $monitoringText = if ($script:activeMode -eq 'work') { $workApps -join '; ' } else { $folders -join '; ' }
+    $monitoringText = if ($script:activeMode -eq 'work') { $workApps -join '; ' } else { (@($gameApplications) + @($folders)) -join '; ' }
     Write-Log "Watcher started in AC-only $script:activeMode mode; cached idle brightness: $cachedBrightnessText; monitoring: $monitoringText"
 
     do {
@@ -630,7 +648,7 @@ try {
             if ($handoffFinished) { break }
         }
 
-        $running = if ($script:activeMode -eq 'work') { Find-RunningWorkApps $workApps } else { Find-RunningGames $folders $excluded }
+        $running = if ($script:activeMode -eq 'work') { Find-RunningWorkApps $workApps } else { Find-RunningGames $folders $gameApplications $excluded }
         $onAcPower = Test-AcPower
         if (-not $onAcPower) {
             if ($active) {
