@@ -1,4 +1,9 @@
-param([switch]$Once, [string]$ConfigPath, [string]$MutexName = 'Local\GameManagementWatcher_v1')
+param(
+    [switch]$Once,
+    [string]$ConfigPath,
+    [string]$MutexName = 'Local\GameManagementWatcher_v1',
+    [string]$WakeEventName = 'Local\GameManagementWatcherWake_v1'
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -35,6 +40,7 @@ $sessionId = $null
 $sessionGameNames = @()
 $activeMode = 'game'
 $mutex = $null
+$wakeEvent = $null
 
 Add-Type -AssemblyName System.Windows.Forms
 if (-not ('GameManagement.GameInput' -as [type])) {
@@ -562,6 +568,7 @@ try {
     $createdNew = $false
     $mutex = [Threading.Mutex]::new($true, $MutexName, [ref]$createdNew)
     if (-not $createdNew) { exit 0 }
+    $wakeEvent = [Threading.EventWaitHandle]::new($false, [Threading.EventResetMode]::AutoReset, $WakeEventName)
 
     if (Test-Path -LiteralPath $statePath) {
         $stale = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
@@ -667,11 +674,12 @@ try {
             Update-IdleBrightness
         }
         if ($Once) { break }
-        Start-Sleep -Seconds ([Math]::Max(2, [int]$config.pollSeconds))
+        [void]$wakeEvent.WaitOne([Math]::Max(2000, [int]$config.pollSeconds * 1000))
     } while ($true)
 }
 finally {
     if ($active) { Stop-Management $false }
+    if ($wakeEvent) { $wakeEvent.Dispose() }
     if ($mutex) {
         try { $mutex.ReleaseMutex() } catch {}
         $mutex.Dispose()

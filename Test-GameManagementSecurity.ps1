@@ -205,6 +205,19 @@ Add-Check 'Game installed-app detection uses exact paths' (
     $watcher -match 'Find-RunningGames\(\$folders, \$selectedPaths, \$excluded\)' -and
     $watcher -match '\$selected\.Contains\(\$path\)'
 ) 'Game Mode can select installed or manually browsed executables by exact path while retaining folder detection.'
+Add-Check 'Temperature polling does not block interface controls' (
+    $appSource -match 'ThreadPool\.QueueUserWorkItem' -and
+    $appSource -match 'Interlocked\.Exchange\(ref temperatureRefreshRunning' -and
+    $appSource -match 'ApplyTemperatureMetrics' -and
+    $appSource -match 'BeginInvoke\(new MethodInvoker'
+) 'Hardware temperature queries run in one bounded background worker and return results to the interface thread.'
+Add-Check 'Settings handoff wakes watcher immediately' (
+    $appSource -match 'SignalWatcherWake' -and
+    $appSource -match 'GameManagementWatcherWake_v1' -and
+    $watcher -match 'WakeEventName' -and
+    $watcher -match '\$wakeEvent\.WaitOne' -and
+    $watcher -notmatch 'Start-Sleep -Seconds \(\[Math\]::Max\(2, \[int\]\$config\.pollSeconds\)\)'
+) 'Mode switches and settings saves signal the watcher instead of waiting for the next scan interval.'
 Add-Check 'Weekly report from existing session history' (
     $appSource -match 'internal static class WeeklyReport' -and
     $appSource -match 'GameSessionHistory\.txt' -and

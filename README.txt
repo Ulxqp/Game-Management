@@ -84,6 +84,8 @@ also appended to GameSessionHistory.txt.
 
 The application can be closed to the notification area. Exiting the interface
 does not stop the background watcher. Use Pause to stop Game Management.
+Temperature sensors run in the background so slow hardware queries do not
+delay button clicks. Mode and settings changes wake the watcher immediately.
 Use Hide activity to collapse the Recent activity panel; Show activity restores
 it without affecting logging.
 Use Flowers on the Current status panel to flip to three animated pixel-art

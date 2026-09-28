@@ -1068,6 +1068,7 @@ namespace GameManagement
         private DateTime lastWatcherStartAttempt = DateTime.MinValue;
         private bool modeSwitchInProgress;
         private string temperatureSessionKey;
+        private int temperatureRefreshRunning;
         private bool exiting;
         private GameSettings settings;
 
@@ -2053,8 +2054,34 @@ namespace GameManagement
                 if (File.Exists(performanceStatePath)) File.Delete(performanceStatePath);
                 return;
             }
-            float? cpuTemperature = ReadCpuTemperature();
-            float? gpuTemperature = ReadGpuTemperature();
+            if (System.Threading.Interlocked.Exchange(ref temperatureRefreshRunning, 1) != 0) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                float? cpuTemperature = ReadCpuTemperature();
+                float? gpuTemperature = ReadGpuTemperature();
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate
+                    {
+                        ApplyTemperatureMetrics(currentSessionKey, cpuTemperature, gpuTemperature);
+                    }));
+                }
+                catch
+                {
+                    System.Threading.Interlocked.Exchange(ref temperatureRefreshRunning, 0);
+                }
+            });
+        }
+
+        private void ApplyTemperatureMetrics(string sessionKey, float? cpuTemperature, float? gpuTemperature)
+        {
+            System.Threading.Interlocked.Exchange(ref temperatureRefreshRunning, 0);
+            if (exiting || IsDisposed || !IsHandleCreated) return;
+            if (!string.Equals(sessionKey, GetRuntimeSessionKey(), StringComparison.Ordinal))
+            {
+                RefreshTemperatureMetrics();
+                return;
+            }
             if (cpuTemperature.HasValue)
                 peakCpuTemperature = !peakCpuTemperature.HasValue ? cpuTemperature : Math.Max(peakCpuTemperature.Value, cpuTemperature.Value);
             if (gpuTemperature.HasValue)
@@ -2566,6 +2593,7 @@ namespace GameManagement
                     }
                     finally { transitionMutex.ReleaseMutex(); }
                 }
+                SignalWatcherWake();
                 Stopwatch wait = Stopwatch.StartNew();
                 while (wait.ElapsedMilliseconds < timeoutMs)
                 {
@@ -2615,6 +2643,18 @@ namespace GameManagement
                     if (File.Exists(ackPath)) File.Delete(ackPath);
                 }
             }
+        }
+
+        private static void SignalWatcherWake()
+        {
+            try
+            {
+                using (System.Threading.EventWaitHandle wakeEvent =
+                    System.Threading.EventWaitHandle.OpenExisting(@"Local\GameManagementWatcherWake_v1"))
+                    wakeEvent.Set();
+            }
+            catch (System.Threading.WaitHandleCannotBeOpenedException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private bool IsMatchingModeSwitchAck(string ackPath, string requestId, string oldMode)

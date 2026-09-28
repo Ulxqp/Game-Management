@@ -26,6 +26,7 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 - Sessions lasting exactly two minutes or less are ignored
 - Taskbar and notification-area controls
 - Low-overhead idle tray mode with full one-second temperature monitoring during games
+- Responsive controls with background sensor reads and immediate watcher wake-ups
 - Activity log hidden on startup and available through Show activity
 - Configurable single-instance launch at Windows sign-in
 - Live timestamp-based `HH:MM:SS` Work Mode session timer
@@ -63,10 +64,10 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v2.3.2 package was checked on September 28, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic mode switching, installed-app discovery in both modes, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
+The v2.3.3 package was checked on September 28, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic and immediately signaled mode switching, non-blocking sensor polling, installed-app discovery in both modes, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **48/48 checks passed**
+- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **50/50 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)

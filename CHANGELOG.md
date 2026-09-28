@@ -1,5 +1,11 @@
 # Game Management changelog
 
+## 2.3.3 — 2026-09-28
+
+- Mode switches and settings saves now wake the watcher immediately instead of waiting for the next 2–3 second scan.
+- CPU, GPU, Lenovo WMI, and NVIDIA temperature reads now run outside the interface thread, so slow sensors cannot delay button clicks or animations.
+- Overlapping temperature polls are skipped safely to prevent background work from accumulating.
+
 ## 2.3.2 — 2026-09-28
 
 - Added the installed-application picker to Game Mode, alongside Browse file and Add folder.
