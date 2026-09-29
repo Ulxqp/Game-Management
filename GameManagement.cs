@@ -12,6 +12,9 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
+
 namespace GameManagement
 {
     internal static class Program
@@ -720,12 +723,35 @@ namespace GameManagement
         }
     }
 
+    internal sealed class ManagementStatusSnapshot
+    {
+        public int Generation;
+        public bool Full;
+        public bool Watcher;
+        public bool StateActive;
+        public bool Managed;
+        public bool Startup;
+        public bool Restarting;
+        public string ActivePlan;
+        public string Game;
+        public int? Brightness;
+        public string[] WorkApplications = new string[0];
+        public DateTime? WorkSessionStartedAt;
+        public string[] RecentLogLines;
+        public string Error;
+    }
+
     internal sealed class InstalledAppsForm : RetroDialogForm
     {
+        private static readonly object DiscoveryCacheLock = new object();
+        private static List<InstalledApp> cachedApplications;
         private readonly ListView list = new ListView();
         private readonly TextBox search = new TextBox();
-        private readonly List<InstalledApp> applications;
+        private readonly Button addButton;
+        private List<InstalledApp> applications = new List<InstalledApp>();
         private readonly ImageList icons = new ImageList();
+        private int fillGeneration;
+        private bool discoveryStarted;
         public string SelectedPath { get; private set; }
 
         public InstalledAppsForm()
@@ -737,6 +763,7 @@ namespace GameManagement
             ContentPanel.Controls.Add(help);
             search.Location = new Point(15, 37);
             search.Width = 565;
+            search.Enabled = false;
             search.TextChanged += delegate { FillList(); };
             ContentPanel.Controls.Add(search);
             list.Location = new Point(15, 68);
@@ -750,19 +777,49 @@ namespace GameManagement
             list.SmallImageList = icons;
             list.DoubleClick += delegate { SelectApp(); };
             ContentPanel.Controls.Add(list);
-            Button add = RetroButton("Add selected", 105, 25);
-            add.Location = new Point(475, 389);
-            add.TabStop = true;
-            add.Click += delegate { SelectApp(); };
-            ContentPanel.Controls.Add(add);
-            AcceptButton = add;
-            applications = Discover();
-            FillList();
+            addButton = RetroButton("Add selected", 105, 25);
+            addButton.Location = new Point(475, 389);
+            addButton.TabStop = true;
+            addButton.Enabled = false;
+            addButton.Click += delegate { SelectApp(); };
+            ContentPanel.Controls.Add(addButton);
+            AcceptButton = addButton;
+            list.Items.Add(new ListViewItem("Loading installed applications...") { ForeColor = Color.DimGray });
+            Shown += delegate { BeginDiscovery(); };
+            FormClosed += delegate { System.Threading.Interlocked.Increment(ref fillGeneration); };
+        }
+
+        private void BeginDiscovery()
+        {
+            if (discoveryStarted) return;
+            discoveryStarted = true;
+            System.Threading.Thread discoveryThread = new System.Threading.Thread(new System.Threading.ThreadStart(delegate
+            {
+                List<InstalledApp> discovered = DiscoverCached();
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate
+                    {
+                        if (IsDisposed) return;
+                        applications = discovered;
+                        search.Enabled = true;
+                        addButton.Enabled = true;
+                        FillList();
+                        search.Focus();
+                    }));
+                }
+                catch (InvalidOperationException) { }
+            }));
+            discoveryThread.IsBackground = true;
+            discoveryThread.Name = "Game Management installed-app discovery";
+            discoveryThread.SetApartmentState(System.Threading.ApartmentState.STA);
+            discoveryThread.Start();
         }
 
         private void FillList()
         {
-            if (applications == null) return;
+            int generation = System.Threading.Interlocked.Increment(ref fillGeneration);
+            List<KeyValuePair<ListViewItem, string>> rows = new List<KeyValuePair<ListViewItem, string>>();
             list.BeginUpdate();
             try
             {
@@ -770,22 +827,55 @@ namespace GameManagement
                 icons.Images.Clear();
                 foreach (InstalledApp app in applications.Where(item => item.Name.IndexOf(search.Text, StringComparison.OrdinalIgnoreCase) >= 0 || item.Path.IndexOf(search.Text, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
-                    int imageIndex = -1;
-                    try
-                    {
-                        using (Icon icon = Icon.ExtractAssociatedIcon(app.Path))
-                        {
-                            if (icon != null) { icons.Images.Add(icon); imageIndex = icons.Images.Count - 1; }
-                        }
-                    }
-                    catch { }
-                    ListViewItem row = new ListViewItem(app.Name, imageIndex);
+                    ListViewItem row = new ListViewItem(app.Name, -1);
                     row.SubItems.Add(app.Path);
                     row.Tag = app.Path;
                     list.Items.Add(row);
+                    rows.Add(new KeyValuePair<ListViewItem, string>(row, app.Path));
                 }
             }
             finally { list.EndUpdate(); }
+            LoadIconsInBackground(rows, generation);
+        }
+
+        private void LoadIconsInBackground(List<KeyValuePair<ListViewItem, string>> rows, int generation)
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                foreach (KeyValuePair<ListViewItem, string> entry in rows)
+                {
+                    if (generation != System.Threading.Interlocked.CompareExchange(ref fillGeneration, 0, 0)) return;
+                    ListViewItem row = entry.Key;
+                    string path = entry.Value;
+                    Bitmap iconBitmap = null;
+                    try
+                    {
+                        using (Icon icon = Icon.ExtractAssociatedIcon(path))
+                            if (icon != null) iconBitmap = icon.ToBitmap();
+                    }
+                    catch { }
+                    if (iconBitmap == null) continue;
+                    Bitmap readyBitmap = iconBitmap;
+                    try
+                    {
+                        BeginInvoke(new MethodInvoker(delegate
+                        {
+                            try
+                            {
+                                if (generation != fillGeneration || IsDisposed || row.ListView != list) return;
+                                icons.Images.Add(readyBitmap);
+                                row.ImageIndex = icons.Images.Count - 1;
+                            }
+                            finally { readyBitmap.Dispose(); }
+                        }));
+                    }
+                    catch
+                    {
+                        readyBitmap.Dispose();
+                        return;
+                    }
+                }
+            });
         }
 
         private void SelectApp()
@@ -850,6 +940,20 @@ namespace GameManagement
                 finally { if (shell != null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell); }
             }
             return found.Values.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        private static List<InstalledApp> DiscoverCached()
+        {
+            lock (DiscoveryCacheLock)
+            {
+                if (cachedApplications != null) return new List<InstalledApp>(cachedApplications);
+            }
+            List<InstalledApp> discovered = Discover();
+            lock (DiscoveryCacheLock)
+            {
+                if (cachedApplications == null) cachedApplications = discovered;
+                return new List<InstalledApp>(cachedApplications);
+            }
         }
 
         private static void AddCandidate(Dictionary<string, InstalledApp> found, string name, string rawPath)
@@ -1069,6 +1173,12 @@ namespace GameManagement
         private bool modeSwitchInProgress;
         private string temperatureSessionKey;
         private int temperatureRefreshRunning;
+        private int statusRefreshRunning;
+        private int statusRefreshPending;
+        private int statusRefreshGeneration;
+        private bool settingsSaveInProgress;
+        private int controlActionRunning;
+        private int watcherTransitionRunning;
         private bool exiting;
         private GameSettings settings;
 
@@ -1340,7 +1450,7 @@ namespace GameManagement
 
             Button refreshButton = RetroButton("Refresh", 92, 26);
             refreshButton.Location = new Point(622, 93);
-            refreshButton.Click += delegate { RefreshStatus(); };
+            refreshButton.Click += delegate { SetFooter("Refreshing status..."); RefreshStatus(); };
             gameSurface.Controls.Add(refreshButton);
 
             GroupBox settingsGroup = RetroGroup("Settings", 414, 132, 370, 184);
@@ -1463,7 +1573,7 @@ namespace GameManagement
             Button saveButton = RetroButton("Save settings", 228, 25);
             saveButton.Location = new Point(534, 89);
             saveButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            saveButton.Click += delegate { SaveSettings(); };
+            saveButton.Click += delegate { SaveSettingsAsync(null, null); };
             foldersGroup.Controls.Add(saveButton);
 
             logGroup = RetroGroup("Recent activity", 20, 484, 764, 95);
@@ -1599,7 +1709,7 @@ namespace GameManagement
             {
                 StartUiSignalListener();
                 RefreshStatus();
-                if (enableOnStart && !IsWatcherRunning()) EnableGameManagement(false);
+                if (enableOnStart) EnableGameManagement(false);
                 if (showForBreakOnStart) ShowForBreak();
                 else if (hideOnStart) BeginInvoke(new MethodInvoker(HideAfterBreak));
                 if (Visible || File.Exists(statePath)) RefreshTemperatureMetrics();
@@ -1726,7 +1836,13 @@ namespace GameManagement
             Button saveTimer = RetroButton("Save timer", 92, 25);
             saveTimer.Location = new Point(654, 14);
             saveTimer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            saveTimer.Click += delegate { if (SaveSettings()) workFooterLabel.Text = "Work timer saved."; };
+            saveTimer.Click += delegate
+            {
+                SaveSettingsAsync(null, delegate(bool saved)
+                {
+                    if (saved) workFooterLabel.Text = "Work timer saved.";
+                });
+            };
             workTimerSettings.Controls.Add(saveTimer);
 
             workSurface.Resize += delegate
@@ -1822,7 +1938,10 @@ namespace GameManagement
 
         private void SaveWorkApplications()
         {
-            if (SaveSettings()) workFooterLabel.Text = "Work applications saved. Monitoring restarted if needed.";
+            SaveSettingsAsync(null, delegate(bool saved)
+            {
+                if (saved) workFooterLabel.Text = "Work applications saved. Monitoring restarted if needed.";
+            });
         }
 
         private void FlipManagementMode()
@@ -1830,11 +1949,21 @@ namespace GameManagement
             if (workspaceFlipTimer.Enabled || modeSwitchInProgress) return;
             targetWorkView = !workView;
             modeSwitchInProgress = true;
-            if (!SaveSettings(targetWorkView ? "work" : "game"))
+            System.Threading.Interlocked.Increment(ref statusRefreshGeneration);
+            System.Threading.Interlocked.Exchange(ref statusRefreshPending, 1);
+            SaveSettingsAsync(targetWorkView ? "work" : "game", delegate(bool saved)
             {
-                modeSwitchInProgress = false;
-                return;
-            }
+                if (!saved)
+                {
+                    modeSwitchInProgress = false;
+                    return;
+                }
+                BeginManagementModeFlip();
+            });
+        }
+
+        private void BeginManagementModeFlip()
+        {
             workspaceFlipFrame = 0;
             workspaceFlipSurface = workView ? workSurface : gameSurface;
             workspaceFlipBounds = workspaceFlipSurface.Bounds;
@@ -1876,7 +2005,6 @@ namespace GameManagement
             workModeFlipButton.Enabled = true;
             modeSwitchInProgress = false;
             RefreshStatus();
-            if (workView) RefreshWorkStatus();
         }
 
         private void ShowManagementMode(bool showWork)
@@ -1887,10 +2015,10 @@ namespace GameManagement
             if (showWork) workSurface.BringToFront(); else gameSurface.BringToFront();
         }
 
-        private string[] GetRunningSelectedWorkApps()
+        private string[] GetRunningSelectedWorkApps(string[] selectedPaths)
         {
-            if (settings == null || settings.workApps == null) return new string[0];
-            HashSet<string> selected = new HashSet<string>(settings.workApps.Where(File.Exists), StringComparer.OrdinalIgnoreCase);
+            if (selectedPaths == null || selectedPaths.Length == 0) return new string[0];
+            HashSet<string> selected = new HashSet<string>(selectedPaths.Where(File.Exists), StringComparer.OrdinalIgnoreCase);
             HashSet<string> running = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (Process process in Process.GetProcesses())
             {
@@ -1908,9 +2036,8 @@ namespace GameManagement
         private void RefreshWorkStatus()
         {
             if (!workView || settings == null) return;
-            string[] running = GetRunningSelectedWorkApps();
-            SetLabelText(workAppsValue, running.Length > 0 ? string.Join(", ", running) : "None");
-            workSessionStartedAt = null;
+            string[] running = GetRunningSelectedWorkApps(settings.workApps == null ? new string[0] : settings.workApps.ToArray());
+            DateTime? sessionStartedAt = null;
             try
             {
                 if (File.Exists(statePath))
@@ -1922,11 +2049,19 @@ namespace GameManagement
                     {
                         DateTime began;
                         if (DateTime.TryParse(Convert.ToString(started), null, System.Globalization.DateTimeStyles.RoundtripKind, out began))
-                            workSessionStartedAt = began.ToLocalTime();
+                            sessionStartedAt = began.ToLocalTime();
                     }
                 }
             }
             catch { }
+            ApplyWorkStatus(running, sessionStartedAt);
+        }
+
+        private void ApplyWorkStatus(string[] running, DateTime? sessionStartedAt)
+        {
+            if (!workView || settings == null) return;
+            SetLabelText(workAppsValue, running != null && running.Length > 0 ? string.Join(", ", running) : "None");
+            workSessionStartedAt = sessionStartedAt;
             workModeValue.Text = workSessionStartedAt.HasValue ? "WORK ACTIVE" : "Ready / monitoring";
             workModeValue.ForeColor = workSessionStartedAt.HasValue ? Color.Green : Color.Black;
             RefreshWorkElapsedDisplay();
@@ -2328,6 +2463,8 @@ namespace GameManagement
                 MinimumSize = new Size(720, CompactExpandedHeight);
                 ClientSize = new Size(ClientSize.Width, Math.Max(CompactExpandedHeight, expandedClientHeight));
                 SetFooter("Recent activity shown.");
+                System.Threading.Interlocked.Increment(ref statusRefreshGeneration);
+                RefreshStatus();
             }
         }
 
@@ -2494,15 +2631,20 @@ namespace GameManagement
             UpdateTimerConfirmState();
         }
 
-        private bool SaveSettings(string requestedMode = null)
+        private void SaveSettingsAsync(string requestedMode, Action<bool> completed)
         {
+            if (settingsSaveInProgress || System.Threading.Interlocked.CompareExchange(ref watcherTransitionRunning, 1, 0) != 0)
+            {
+                SetFooter("Please wait for the current change to finish...");
+                if (completed != null) completed(false);
+                return;
+            }
+
             GameSettings previousSettings = settings;
-            string previousContents = null;
-            bool watcherStopped = false;
-            bool handoffRequested = false;
+            GameSettings next;
             try
             {
-                GameSettings next = json.Deserialize<GameSettings>(json.Serialize(settings));
+                next = json.Deserialize<GameSettings>(json.Serialize(settings));
                 next.pollSeconds = (int)pollInput.Value;
                 next.gameBrightnessPercent = (int)brightnessInput.Value;
                 next.gameTimerEnabled = timerEnabledCheck.Checked;
@@ -2517,42 +2659,94 @@ namespace GameManagement
                 next.gameFolders = gameTargets.Where(item => !item.IsApplication).Select(item => item.Path).ToArray();
                 next.activeMode = requestedMode ?? (workView ? "work" : "game");
                 next.workApps = workAppsList.Items.Cast<object>().Select(item => item.ToString()).ToArray();
-                previousContents = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
-                bool wasRunning = IsWatcherRunning();
-                if (wasRunning)
-                {
-                    handoffRequested = true;
-                    StopWatcherForSettingsChange(previousSettings.activeMode);
-                    watcherStopped = true;
-                }
-                File.WriteAllText(settingsPath, PrettyJson(json.Serialize(next)), new UTF8Encoding(false));
-                if (wasRunning) StartWatcherAfterSettingsChange();
-                settings = next;
-                SetFooter(wasRunning ? "Settings saved; watcher restarted." : "Settings saved.");
-                UpdateTimerConfirmState();
-                if (!modeSwitchInProgress) RefreshStatus();
-                return true;
             }
             catch (Exception ex)
             {
-                settings = previousSettings;
-                if (watcherStopped || handoffRequested)
+                System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0);
+                ShowError("Settings could not be prepared.\r\n\r\n" + ex.Message);
+                if (completed != null) completed(false);
+                return;
+            }
+
+            settingsSaveInProgress = true;
+            SetSettingsControlsEnabled(false);
+            SetFooter("Applying settings...");
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string previousContents = null;
+                bool watcherStopped = false;
+                bool handoffRequested = false;
+                bool wasRunning = false;
+                string error = null;
+                string restoreError = null;
+                try
                 {
-                    try
+                    previousContents = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
+                    wasRunning = IsWatcherRunning();
+                    if (wasRunning)
                     {
-                        if (previousContents == null) File.Delete(settingsPath);
-                        else File.WriteAllText(settingsPath, previousContents, new UTF8Encoding(false));
-                        if (!IsWatcherRunning()) StartWatcherAfterSettingsChange();
-                        lastWatcherStartAttempt = DateTime.MinValue;
+                        handoffRequested = true;
+                        StopWatcherForSettingsChange(previousSettings.activeMode);
+                        watcherStopped = true;
                     }
-                    catch (Exception restoreEx)
+                    WriteSettingsAtomically(PrettyJson(new JavaScriptSerializer().Serialize(next)));
+                    if (wasRunning) StartWatcherAfterSettingsChange();
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                    if (watcherStopped || handoffRequested)
                     {
-                        ShowError("The previous watcher could not be restarted. Please use Enable after checking the log.\r\n\r\n" + restoreEx.Message);
+                        try
+                        {
+                            if (previousContents == null) File.Delete(settingsPath);
+                            else WriteSettingsAtomically(previousContents);
+                            if (!IsWatcherRunning()) StartWatcherAfterSettingsChange();
+                            lastWatcherStartAttempt = DateTime.MinValue;
+                        }
+                        catch (Exception restoreEx) { restoreError = restoreEx.Message; }
                     }
                 }
-                ShowError("Settings could not be saved.\r\n\r\n" + ex.Message);
-                return false;
-            }
+
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate
+                    {
+                        settingsSaveInProgress = false;
+                        System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0);
+                        SetSettingsControlsEnabled(true);
+                        bool saved = string.IsNullOrEmpty(error);
+                        if (saved)
+                        {
+                            settings = next;
+                            System.Threading.Interlocked.Increment(ref statusRefreshGeneration);
+                            SetFooter(wasRunning ? "Settings saved; watcher restarted." : "Settings saved.");
+                            UpdateTimerConfirmState();
+                            if (!modeSwitchInProgress) RefreshStatus();
+                        }
+                        else
+                        {
+                            settings = previousSettings;
+                            if (!string.IsNullOrEmpty(restoreError))
+                                ShowError("The previous watcher could not be restarted. Please use Enable after checking the log.\r\n\r\n" + restoreError);
+                            ShowError("Settings could not be saved.\r\n\r\n" + error);
+                        }
+                        if (completed != null) completed(saved);
+                    }));
+                }
+                catch
+                {
+                    settingsSaveInProgress = false;
+                    System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0);
+                }
+            });
+        }
+
+        private void SetSettingsControlsEnabled(bool enabled)
+        {
+            if (gameSurface != null) gameSurface.Enabled = enabled;
+            if (workSurface != null) workSurface.Enabled = enabled;
+            UseWaitCursor = !enabled;
         }
 
         private void StopWatcherForSettingsChange(string oldMode)
@@ -2572,9 +2766,10 @@ namespace GameManagement
             if (File.Exists(ackPath)) File.Delete(ackPath);
             bool finished = false;
             bool canceled = false;
+            JavaScriptSerializer operationJson = new JavaScriptSerializer();
             try
             {
-                File.WriteAllText(temporaryRequestPath, json.Serialize(new
+                File.WriteAllText(temporaryRequestPath, operationJson.Serialize(new
                 {
                     RequestId = requestId,
                     Mode = oldMode,
@@ -2597,7 +2792,7 @@ namespace GameManagement
                 Stopwatch wait = Stopwatch.StartNew();
                 while (wait.ElapsedMilliseconds < timeoutMs)
                 {
-                    if (IsMatchingModeSwitchAck(ackPath, requestId, oldMode) && !IsWatcherRunning())
+                    if (IsMatchingModeSwitchAck(ackPath, requestId, oldMode, operationJson) && !IsWatcherRunning())
                     {
                         finished = true;
                         return;
@@ -2611,7 +2806,7 @@ namespace GameManagement
                     catch (System.Threading.AbandonedMutexException) { }
                     try
                     {
-                        acknowledged = IsMatchingModeSwitchAck(ackPath, requestId, oldMode);
+                        acknowledged = IsMatchingModeSwitchAck(ackPath, requestId, oldMode, operationJson);
                         if (!acknowledged)
                         {
                             if (File.Exists(requestPath)) File.Delete(requestPath);
@@ -2657,12 +2852,12 @@ namespace GameManagement
             catch (UnauthorizedAccessException) { }
         }
 
-        private bool IsMatchingModeSwitchAck(string ackPath, string requestId, string oldMode)
+        private bool IsMatchingModeSwitchAck(string ackPath, string requestId, string oldMode, JavaScriptSerializer operationJson)
         {
             try
             {
                 if (!File.Exists(ackPath)) return false;
-                Dictionary<string, object> ack = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(ackPath));
+                Dictionary<string, object> ack = operationJson.Deserialize<Dictionary<string, object>>(File.ReadAllText(ackPath));
                 object id, mode, saved;
                 return ack.TryGetValue("RequestId", out id) &&
                     ack.TryGetValue("Mode", out mode) &&
@@ -2688,9 +2883,12 @@ namespace GameManagement
 
         private void ConfirmTimerSettings()
         {
-            if (!SaveSettings()) return;
-            SetFooter("Timer confirmed: " + timerMinutesInput.Value + "-minute game / " + breakMinutesInput.Value + "-minute break.");
-            RefreshTimerDisplay(IsRuntimeMode("game"));
+            SaveSettingsAsync(null, delegate(bool saved)
+            {
+                if (!saved) return;
+                SetFooter("Timer confirmed: " + timerMinutesInput.Value + "-minute game / " + breakMinutesInput.Value + "-minute break.");
+                RefreshTimerDisplay(IsRuntimeMode("game"));
+            });
         }
 
         private void UpdateTimerConfirmState()
@@ -2736,6 +2934,21 @@ namespace GameManagement
                 else if (!char.IsWhiteSpace(character)) output.Append(character);
             }
             return output.ToString();
+        }
+
+        private void WriteSettingsAtomically(string contents)
+        {
+            string temporaryPath = settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporaryPath, contents, new UTF8Encoding(false));
+                if (File.Exists(settingsPath)) File.Replace(temporaryPath, settingsPath, null, true);
+                else File.Move(temporaryPath, settingsPath);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            }
         }
 
         private void ChooseInstalledGameApplication()
@@ -2800,15 +3013,16 @@ namespace GameManagement
                 ShowError("Install-GameManagement.ps1 was not found in:\r\n" + rootPath);
                 return;
             }
-            try
+            RunControlActionAsync("Enabling Game Management...", delegate
             {
-                RunPowerShell(installerPath, true);
+                if (!IsWatcherRunning()) RunPowerShell(installerPath, true);
+                else EnsureRunEntry();
                 File.WriteAllText(engineEnabledPath, "enabled");
+            }, delegate
+            {
                 SetFooter("Game Management enabled and set to start with Windows.");
                 if (showMessage) RetroMessage("Game Management is enabled and monitoring your game folders.", "Game Management");
-            }
-            catch (Exception ex) { ShowError("Game Management could not be enabled.\r\n\r\n" + ex.Message); }
-            RefreshStatus();
+            }, "Game Management could not be enabled.");
         }
 
         private void PauseGameManagement()
@@ -2823,34 +3037,73 @@ namespace GameManagement
                 ShowError("Pause-GameManagement.ps1 was not found in:\r\n" + rootPath);
                 return;
             }
-            try
+            RunControlActionAsync("Pausing Game Management...", delegate
             {
                 if (File.Exists(engineEnabledPath)) File.Delete(engineEnabledPath);
                 RunPowerShell(pausePath, true);
+            }, delegate
+            {
                 SetFooter("Game Management paused; captured system settings restored.");
                 if (showMessage) RetroMessage("Game Management is paused. The previous power plan and brightness were restored.", "Game Management");
-            }
-            catch (Exception ex) { ShowError("Game Management could not be paused safely.\r\n\r\n" + ex.Message); }
-            RefreshStatus();
+            }, "Game Management could not be paused safely.");
         }
 
         private void SetStartup(bool enabled)
         {
-            if (enabled)
+            RunControlActionAsync(enabled ? "Enabling Windows startup..." : "Disabling Windows startup...", delegate
             {
-                if (!IsWatcherRunning()) EnableGameManagement(false);
-                else EnsureRunEntry();
+                if (enabled)
+                {
+                    if (!IsWatcherRunning())
+                    {
+                        RunPowerShell(installerPath, true);
+                        File.WriteAllText(engineEnabledPath, "enabled");
+                    }
+                    else EnsureRunEntry();
+                }
+                else RemoveRunEntry();
+            }, delegate
+            {
+                SetFooter(enabled
+                    ? "Windows sign-in startup enabled."
+                    : "Windows sign-in startup disabled; current watcher left running.");
+            }, "Startup setting could not be changed.");
+        }
+
+        private void RunControlActionAsync(string progressText, Action work, Action success, string errorPrefix)
+        {
+            if (settingsSaveInProgress || System.Threading.Interlocked.CompareExchange(ref watcherTransitionRunning, 1, 0) != 0)
+            {
+                SetFooter("Please wait for the current change to finish...");
+                return;
             }
-            else
+            System.Threading.Interlocked.Exchange(ref controlActionRunning, 1);
+            SetSettingsControlsEnabled(false);
+            SetFooter(progressText);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
+                string error = null;
+                try { work(); }
+                catch (Exception ex) { error = ex.Message; }
                 try
                 {
-                    RemoveRunEntry();
-                    SetFooter("Windows sign-in startup disabled; current watcher left running.");
+                    BeginInvoke(new MethodInvoker(delegate
+                    {
+                        System.Threading.Interlocked.Exchange(ref controlActionRunning, 0);
+                        System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0);
+                        SetSettingsControlsEnabled(true);
+                        if (string.IsNullOrEmpty(error)) success();
+                        else ShowError(errorPrefix + "\r\n\r\n" + error);
+                        System.Threading.Interlocked.Increment(ref statusRefreshGeneration);
+                        RefreshStatus();
+                    }));
                 }
-                catch (Exception ex) { ShowError("Startup setting could not be changed.\r\n\r\n" + ex.Message); }
-            }
-            RefreshStatus();
+                catch
+                {
+                    System.Threading.Interlocked.Exchange(ref controlActionRunning, 0);
+                    System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0);
+                }
+            });
         }
 
         private void EnsureRunEntry()
@@ -2883,65 +3136,174 @@ namespace GameManagement
             info.UseShellExecute = false;
             info.CreateNoWindow = true;
             info.WindowStyle = ProcessWindowStyle.Hidden;
-            Process process = Process.Start(info);
-            if (wait)
+            using (Process process = Process.Start(info))
             {
-                if (!process.WaitForExit(15000)) throw new TimeoutException("The control script did not finish within 15 seconds.");
-                if (process.ExitCode != 0) throw new InvalidOperationException("The control script returned exit code " + process.ExitCode + ".");
+                if (wait)
+                {
+                    if (!process.WaitForExit(15000)) throw new TimeoutException("The control script did not finish within 15 seconds.");
+                    if (process.ExitCode != 0) throw new InvalidOperationException("The control script returned exit code " + process.ExitCode + ".");
+                }
             }
         }
 
         private void RefreshStatus()
         {
             if (IsDisposed || !IsHandleCreated || modeSwitchInProgress) return;
+            if (System.Threading.Interlocked.Exchange(ref statusRefreshRunning, 1) != 0)
+            {
+                System.Threading.Interlocked.Exchange(ref statusRefreshPending, 1);
+                return;
+            }
+            bool collectFullStatus = Visible;
+            bool collectWorkStatus = workView;
+            bool collectRecentLog = activityVisible;
+            int generation = System.Threading.Interlocked.Increment(ref statusRefreshGeneration);
+            string configuredMode = settings == null ? "game" : settings.activeMode;
+            string[] selectedWorkApps = settings == null || settings.workApps == null
+                ? new string[0]
+                : settings.workApps.ToArray();
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                ManagementStatusSnapshot snapshot = CollectStatusSnapshot(
+                    generation, collectFullStatus, collectWorkStatus, collectRecentLog, configuredMode, selectedWorkApps);
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate { ApplyStatusSnapshot(snapshot); }));
+                }
+                catch
+                {
+                    System.Threading.Interlocked.Exchange(ref statusRefreshRunning, 0);
+                }
+            });
+        }
+
+        private ManagementStatusSnapshot CollectStatusSnapshot(
+            int generation, bool collectFullStatus, bool collectWorkStatus, bool collectRecentLog,
+            string configuredMode, string[] selectedWorkApps)
+        {
+            ManagementStatusSnapshot snapshot = new ManagementStatusSnapshot();
+            snapshot.Generation = generation;
             try
             {
-                bool watcher = IsWatcherRunning();
+                snapshot.Watcher = IsWatcherRunning();
                 bool engineEnabled = File.Exists(engineEnabledPath);
-                if (engineEnabled && !watcher && DateTime.Now - lastWatcherStartAttempt > TimeSpan.FromSeconds(10))
+                if (engineEnabled && !snapshot.Watcher && DateTime.Now - lastWatcherStartAttempt > TimeSpan.FromSeconds(10) &&
+                    System.Threading.Interlocked.CompareExchange(ref watcherTransitionRunning, 1, 0) == 0)
                 {
-                    lastWatcherStartAttempt = DateTime.Now;
-                    RunPowerShell(watcherPath, false);
-                    SetFooter("Restarting the Game Management watcher...");
+                    try
+                    {
+                        if (File.Exists(engineEnabledPath) && !IsWatcherRunning())
+                        {
+                            lastWatcherStartAttempt = DateTime.Now;
+                            RunPowerShell(watcherPath, false);
+                            snapshot.Restarting = true;
+                        }
+                    }
+                    finally { System.Threading.Interlocked.Exchange(ref watcherTransitionRunning, 0); }
                 }
-                string runtimeMode = GetRuntimeMode();
-                bool stateActive = runtimeMode != null;
+                string runtimeMode = null;
+                Dictionary<string, object> runtimeState = null;
+                if (File.Exists(statePath))
+                {
+                    try
+                    {
+                        JavaScriptSerializer serializer = new JavaScriptSerializer();
+                        runtimeState = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(statePath));
+                        object mode;
+                        if (runtimeState.TryGetValue("Mode", out mode)) runtimeMode = Convert.ToString(mode);
+                    }
+                    catch { }
+                }
+                snapshot.StateActive = string.Equals(runtimeMode, "game", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(runtimeMode, "work", StringComparison.OrdinalIgnoreCase);
+                if (!collectFullStatus) return snapshot;
+
+                snapshot.Full = true;
                 bool gameStateActive = string.Equals(runtimeMode, "game", StringComparison.OrdinalIgnoreCase);
-                if (!Visible)
-                {
-                    TrackManagementState(stateActive);
-                    trayIcon.Text = watcher && !stateActive ? "Game Management" : (stateActive ? "Game Management — ACTIVE" : "Game Management — paused");
-                    return;
-                }
                 string activeSchemeOutput = RunCapture("powercfg.exe", "/getactivescheme");
                 string activeSchemeGuid = GetActiveSchemeGuid(activeSchemeOutput);
-                bool managed = gameStateActive || (runtimeMode == null &&
-                    string.Equals(settings.activeMode, "game", StringComparison.OrdinalIgnoreCase) &&
+                snapshot.Managed = gameStateActive || (runtimeMode == null &&
+                    string.Equals(configuredMode, "game", StringComparison.OrdinalIgnoreCase) &&
                     activeSchemeGuid == ManagementPlanGuid);
-                TrackManagementState(stateActive || managed);
-                string activePlan = GetActiveSchemeName(activeSchemeOutput, activeSchemeGuid);
-                string game = GetActiveGameFromLog(managed);
-                int? brightness = GetBrightness();
-                bool startup = HasStartupEntry();
+                snapshot.ActivePlan = GetActiveSchemeName(activeSchemeOutput, activeSchemeGuid);
+                string[] logLines = (snapshot.Managed || collectRecentLog) ? ReadLogTail(200) : new string[0];
+                snapshot.Game = GetActiveGameFromLines(snapshot.Managed, logLines);
+                if (collectRecentLog)
+                    snapshot.RecentLogLines = logLines.Skip(Math.Max(0, logLines.Length - 6)).ToArray();
+                snapshot.Brightness = GetBrightness();
+                snapshot.Startup = HasStartupEntry();
 
-                statusLamp.BackColor = managed ? Color.Lime : (watcher ? Color.Yellow : Color.Gray);
-                statusValue.Text = managed ? "GAME ACTIVE" : (watcher ? "Ready / monitoring" : "Paused");
-                gameValue.Text = managed ? game : "None";
-                planValue.Text = string.IsNullOrEmpty(activePlan) ? "Unavailable" : activePlan;
-                brightnessValue.Text = brightness.HasValue ? brightness.Value + "%" : "Unavailable";
-                RefreshTimerDisplay(managed);
-                watcherValue.Text = watcher ? "Running" : "Stopped";
-                enableButton.Enabled = !watcher;
-                pauseButton.Enabled = watcher || managed;
-                startupCheck.Checked = startup;
-                trayIcon.Text = watcher && !managed ? "Game Management" : (managed ? "Game Management — ACTIVE" : "Game Management — paused");
-                if (workView) RefreshWorkStatus();
-                if (activityVisible) ReadRecentLog();
+                if (collectWorkStatus)
+                {
+                    snapshot.WorkApplications = GetRunningSelectedWorkApps(selectedWorkApps);
+                    if (string.Equals(runtimeMode, "work", StringComparison.OrdinalIgnoreCase) && runtimeState != null)
+                    {
+                        object started;
+                        DateTime began;
+                        if (runtimeState.TryGetValue("ManagementStarted", out started) &&
+                            DateTime.TryParse(Convert.ToString(started), null, System.Globalization.DateTimeStyles.RoundtripKind, out began))
+                            snapshot.WorkSessionStartedAt = began.ToLocalTime();
+                    }
+                }
             }
             catch (Exception ex)
             {
-                SetFooter("Status refresh warning: " + ex.Message);
+                snapshot.Error = ex.Message;
             }
+            return snapshot;
+        }
+
+        private void ApplyStatusSnapshot(ManagementStatusSnapshot snapshot)
+        {
+            System.Threading.Interlocked.Exchange(ref statusRefreshRunning, 0);
+            if (exiting || IsDisposed || !IsHandleCreated) return;
+            if (snapshot.Generation != System.Threading.Interlocked.CompareExchange(ref statusRefreshGeneration, 0, 0))
+            {
+                if (modeSwitchInProgress)
+                    System.Threading.Interlocked.Exchange(ref statusRefreshPending, 1);
+                else
+                {
+                    System.Threading.Interlocked.Exchange(ref statusRefreshPending, 0);
+                    RefreshStatus();
+                }
+                return;
+            }
+            if (modeSwitchInProgress)
+            {
+                System.Threading.Interlocked.Exchange(ref statusRefreshPending, 1);
+                return;
+            }
+            if (!string.IsNullOrEmpty(snapshot.Error)) SetFooter("Status refresh warning: " + snapshot.Error);
+            if (snapshot.Restarting) SetFooter("Restarting the Game Management watcher...");
+            TrackManagementState(snapshot.StateActive || snapshot.Managed);
+            trayIcon.Text = snapshot.Watcher && !snapshot.StateActive
+                ? "Game Management"
+                : (snapshot.StateActive ? "Game Management — ACTIVE" : "Game Management — paused");
+
+            if (snapshot.Full && Visible)
+            {
+                statusLamp.BackColor = snapshot.Managed ? Color.Lime : (snapshot.Watcher ? Color.Yellow : Color.Gray);
+                statusValue.Text = snapshot.Managed ? "GAME ACTIVE" : (snapshot.Watcher ? "Ready / monitoring" : "Paused");
+                gameValue.Text = snapshot.Managed ? snapshot.Game : "None";
+                planValue.Text = string.IsNullOrEmpty(snapshot.ActivePlan) ? "Unavailable" : snapshot.ActivePlan;
+                brightnessValue.Text = snapshot.Brightness.HasValue ? snapshot.Brightness.Value + "%" : "Unavailable";
+                RefreshTimerDisplay(snapshot.Managed);
+                watcherValue.Text = snapshot.Watcher ? "Running" : "Stopped";
+                enableButton.Enabled = !snapshot.Watcher;
+                pauseButton.Enabled = snapshot.Watcher || snapshot.Managed;
+                startupCheck.Checked = snapshot.Startup;
+                trayIcon.Text = snapshot.Watcher && !snapshot.Managed
+                    ? "Game Management"
+                    : (snapshot.Managed ? "Game Management — ACTIVE" : "Game Management — paused");
+                if (workView) ApplyWorkStatus(snapshot.WorkApplications, snapshot.WorkSessionStartedAt);
+                if (activityVisible) ApplyRecentLog(snapshot.RecentLogLines);
+            }
+            else if (Visible)
+            {
+                System.Threading.Interlocked.Exchange(ref statusRefreshPending, 1);
+            }
+
+            if (System.Threading.Interlocked.Exchange(ref statusRefreshPending, 0) != 0) RefreshStatus();
         }
 
         private string GetRuntimeMode()
@@ -3056,17 +3418,13 @@ namespace GameManagement
             return null;
         }
 
-        private string GetActiveGameFromLog(bool managed)
+        private string GetActiveGameFromLines(bool managed, string[] logLines)
         {
-            if (!managed || !File.Exists(logPath)) return "None";
-            try
-            {
-                string line = File.ReadLines(logPath).Reverse().FirstOrDefault(item => item.IndexOf("Game Management ON", StringComparison.OrdinalIgnoreCase) >= 0);
-                if (line == null) return "Detected game";
-                int marker = line.IndexOf("games:", StringComparison.OrdinalIgnoreCase);
-                return marker >= 0 ? line.Substring(marker + 6).Trim() : "Detected game";
-            }
-            catch { return "Detected game"; }
+            if (!managed) return "None";
+            string line = (logLines ?? new string[0]).Reverse().FirstOrDefault(item => item.IndexOf("Game Management ON", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (line == null) return "Detected game";
+            int marker = line.IndexOf("games:", StringComparison.OrdinalIgnoreCase);
+            return marker >= 0 ? line.Substring(marker + 6).Trim() : "Detected game";
         }
 
         private void RefreshTimerDisplay(bool managed)
@@ -3150,17 +3508,38 @@ namespace GameManagement
             catch { return false; }
         }
 
-        private void ReadRecentLog()
+        private string[] ReadLogTail(int maximumLines)
         {
-            if (!File.Exists(logPath)) { logBox.Text = "No activity has been logged yet."; return; }
+            if (!File.Exists(logPath) || maximumLines <= 0) return new string[0];
             try
             {
-                string[] lines = File.ReadAllLines(logPath);
-                logBox.Lines = lines.Skip(Math.Max(0, lines.Length - 6)).ToArray();
-                logBox.SelectionStart = logBox.TextLength;
-                logBox.ScrollToCaret();
+                const int maximumBytes = 262144;
+                using (FileStream stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                {
+                    long start = Math.Max(0, stream.Length - maximumBytes);
+                    stream.Position = start;
+                    using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
+                    {
+                        if (start > 0) reader.ReadLine();
+                        Queue<string> tail = new Queue<string>(maximumLines);
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            if (tail.Count == maximumLines) tail.Dequeue();
+                            tail.Enqueue(line);
+                        }
+                        return tail.ToArray();
+                    }
+                }
             }
-            catch { }
+            catch { return new string[0]; }
+        }
+
+        private void ApplyRecentLog(string[] lines)
+        {
+            logBox.Lines = lines != null && lines.Length > 0 ? lines : new[] { "No activity has been logged yet." };
+            logBox.SelectionStart = logBox.TextLength;
+            logBox.ScrollToCaret();
         }
 
         private void OpenLog()
@@ -3217,6 +3596,11 @@ namespace GameManagement
 
         private void ExitApplication()
         {
+            if (IsWatcherTransitionActive())
+            {
+                ExplainBlockedExit();
+                return;
+            }
             exiting = true;
             refreshTimer.Stop();
             countdownTimer.Stop();
@@ -3228,6 +3612,12 @@ namespace GameManagement
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            if (!exiting && e.CloseReason == CloseReason.UserClosing && IsWatcherTransitionActive())
+            {
+                e.Cancel = true;
+                ExplainBlockedExit();
+                return;
+            }
             if (!exiting && trayCheck.Checked)
             {
                 e.Cancel = true;
@@ -3245,6 +3635,18 @@ namespace GameManagement
             if (showMainEvent != null) showMainEvent.Dispose();
             if (showBreakEvent != null) showBreakEvent.Dispose();
             if (hideBreakEvent != null) hideBreakEvent.Dispose();
+        }
+
+        private bool IsWatcherTransitionActive()
+        {
+            return System.Threading.Interlocked.CompareExchange(ref watcherTransitionRunning, 0, 0) != 0 ||
+                settingsSaveInProgress || System.Threading.Interlocked.CompareExchange(ref controlActionRunning, 0, 0) != 0;
+        }
+
+        private void ExplainBlockedExit()
+        {
+            SetFooter("Please wait—Game Management is finishing a change.");
+            RetroMessage("Game Management is finishing a change. Please wait a moment, then try Exit again.", "Game Management");
         }
 
         private void SetFooter(string text)

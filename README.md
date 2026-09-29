@@ -64,10 +64,10 @@ This compiles the AnyCPU application, runs the safety and RTX compatibility test
 
 ## Verification
 
-The v2.3.3 package was checked on September 28, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic and immediately signaled mode switching, non-blocking sensor polling, installed-app discovery in both modes, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
+The v3.0.0 package was checked on September 29, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic and immediately signaled mode switching, non-blocking status and sensor polling, background installed-app discovery, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **50/50 checks passed**
+- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **56/56 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)

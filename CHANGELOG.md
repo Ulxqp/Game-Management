@@ -1,5 +1,14 @@
 # Game Management changelog
 
+## 3.0.0 — 2026-09-29
+
+- Reworked status collection so power-plan, brightness, watcher, process, and activity-log checks run without freezing the interface.
+- Settings saves, mode handoffs, Enable, Pause, and Windows-startup changes now run in the background while the interface clearly shows that a change is being applied.
+- Added stale-result protection so a delayed refresh from one mode cannot overwrite the newly selected Game or Work screen.
+- Installed-app discovery opens immediately, caches its results, and loads application icons progressively in the background.
+- Settings are replaced atomically, recent activity reads only a bounded tail of the log, and overlapping refreshes are coalesced to reduce disk, WMI, and process-query work.
+- Kept the Windows 98 interface, existing settings, Game/Work timers, session history, automatic AC-only behavior, and Weekly Report data compatible with v2 releases.
+
 ## 2.3.3 — 2026-09-28
 
 - Mode switches and settings saves now wake the watcher immediately instead of waiting for the next 2–3 second scan.

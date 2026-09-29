@@ -4,6 +4,8 @@ GAME MANAGEMENT
 Game Management is a Windows 98-style desktop and notification-area controller
 for automatic game performance sessions and user-selected work focus sessions.
 Its data remains in Documents\GameManagement for upgrade compatibility.
+Version 3.0 keeps slow Windows, sensor, app-discovery, and watcher operations
+off the interface thread so buttons and mode changes stay responsive.
 
 RUN
 ---

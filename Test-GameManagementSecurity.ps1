@@ -275,6 +275,43 @@ Add-Check 'Short sessions excluded from history' (
     $watcher -match 'Remove-Item\s+-LiteralPath\s+\$lastSessionPath' -and
     $watcher -match 'return'
 ) 'Sessions lasting exactly two minutes or less do not update history or open a saved-session summary.'
+Add-Check 'Non-blocking status collection' (
+    $appSource -match 'CollectStatusSnapshot' -and
+    $appSource -match 'ThreadPool\.QueueUserWorkItem' -and
+    $appSource -match 'ApplyStatusSnapshot' -and
+    $appSource -match 'statusRefreshRunning' -and
+    $appSource -match 'statusRefreshPending'
+) 'Power, brightness, watcher, process, and Work-app status checks run in one coalesced background worker.'
+Add-Check 'Stale status results rejected' (
+    $appSource -match 'statusRefreshGeneration' -and
+    $appSource -match 'snapshot\.Generation' -and
+    $appSource -match 'snapshot\.Generation\s*!=\s*System\.Threading\.Interlocked\.CompareExchange'
+) 'A delayed status result cannot overwrite a newer Game/Work mode or settings state.'
+Add-Check 'Non-blocking control and settings changes' (
+    $appSource -match 'SaveSettingsAsync' -and
+    $appSource -match 'RunControlActionAsync' -and
+    $appSource -match 'SetSettingsControlsEnabled\(false\)' -and
+    $appSource -match 'WriteSettingsAtomically'
+) 'Settings, mode handoffs, Enable, Pause, and startup changes leave the Windows message loop responsive and replace settings atomically.'
+Add-Check 'Serialized watcher transitions' (
+    $appSource -match 'watcherTransitionRunning' -and
+    ([regex]::Matches($appSource, 'CompareExchange\(ref watcherTransitionRunning, 1, 0\)').Count -ge 3) -and
+    $appSource -match 'File\.Exists\(engineEnabledPath\) && !IsWatcherRunning\(\)' -and
+    $appSource -match 'CloseReason\.UserClosing && IsWatcherTransitionActive\(\)' -and
+    $appSource -match 'ExplainBlockedExit\(\)'
+) 'Status restart holds the same gate as save/control actions, rechecks state before launch, and all user Exit paths wait for transitions.'
+Add-Check 'Background installed-app discovery' (
+    $appSource -match 'BeginDiscovery' -and
+    $appSource -match 'DiscoverCached' -and
+    $appSource -match 'LoadIconsInBackground' -and
+    $appSource -match 'SetApartmentState\(System\.Threading\.ApartmentState\.STA\)'
+) 'The app picker opens before registry, shortcut, and icon discovery completes, and caches discovery results for later opens.'
+Add-Check 'Bounded shared-log reading' (
+    $appSource -match 'ReadLogTail' -and
+    $appSource -match 'const int maximumBytes = 262144' -and
+    $appSource -match 'FileShare\.ReadWrite \| FileShare\.Delete' -and
+    $appSource -notmatch 'File\.ReadAllLines\(logPath\)'
+) 'Status refresh reads only a bounded log tail and safely shares the file with the background watcher.'
 $installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-GameManagement.ps1')
 Add-Check 'Normal-user startup only' ($installer -match 'CurrentVersion\\Run' -and $installer -notmatch 'ScheduledTask|RunLevel|Verb RunAs') 'No service or elevated startup mechanism is used.'
 Add-Check 'Single configurable application startup' (
