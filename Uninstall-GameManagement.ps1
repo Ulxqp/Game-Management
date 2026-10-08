@@ -56,9 +56,23 @@ $programFiles = @(
     'README.txt',
     'SECURITY-REPORT.md',
     'HARDWARE-COMPATIBILITY.txt'
+    'Source\GameManagement.cs'
+    'Tests\Test-GameManagementSecurity.ps1'
+    'Tests\Test-GameManagementFeatures.ps1'
+    'Documentation\CHANGELOG.md'
+    'Documentation\TEMPERATURE-GUIDE.md'
+    'Documentation\Reports\SECURITY-REPORT.md'
+    'Documentation\Reports\FEATURE-TEST-REPORT.md'
+    'Documentation\Reports\HARDWARE-COMPATIBILITY.txt'
 )
 foreach ($name in $programFiles) {
     Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Force
+}
+foreach ($folder in @('Source','Tests','Documentation\Reports','Documentation')) {
+    $path = Join-Path $InstallRoot $folder
+    if ((Test-Path -LiteralPath $path) -and -not (Get-ChildItem -LiteralPath $path -Force)) {
+        Remove-Item -LiteralPath $path -Force
+    }
 }
 Remove-Item -LiteralPath $InstallRoot -Force
 '@

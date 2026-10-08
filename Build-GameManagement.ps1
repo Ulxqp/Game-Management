@@ -10,13 +10,17 @@ if (-not (Test-Path -LiteralPath $compiler)) {
     ('/win32icon:' + (Join-Path $root 'GameManagement.ico')) `
     /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll `
     /reference:System.Windows.Forms.dll /reference:System.Management.dll `
-    /reference:System.Web.Extensions.dll `
+    /reference:System.Web.Extensions.dll /reference:System.IO.Compression.dll `
+    /reference:System.IO.Compression.FileSystem.dll `
     ('/out:' + (Join-Path $root 'GameManagement.exe')) `
     (Join-Path $root 'GameManagement.cs')
 if ($LASTEXITCODE -ne 0) { throw "Application compilation failed with exit code $LASTEXITCODE." }
 
 & (Join-Path $root 'Test-GameManagementSecurity.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The safety checks did not complete.' }
+
+& (Join-Path $root 'Test-GameManagementFeatures.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'The feature checks did not complete.' }
 
 & (Join-Path $root 'Build-GameManagementInstaller.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The installer build did not complete.' }

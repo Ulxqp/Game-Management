@@ -1,5 +1,43 @@
 # Game Management changelog
 
+## 3.2.1 — 2026-10-08
+
+- Organized installations into Source, Tests, and Documentation folders while preserving runtime file locations and user data.
+- Added a compressed release package with default settings and no personal logs, history, or saved session state.
+
+- Added visible Resume and Pause buttons to Work Mode.
+- Work Mode Pause uses the same safe pause path as Game Mode, freezing the current Work/Break phase and exact remaining time.
+- Work Mode Resume continues the frozen countdown when the matching selected application is detected again.
+
+## 3.2.0 — 2026-10-08
+
+- Added optional automatic Game/Work switching based on the executable that owns the current foreground window. Unassigned and conflicting applications are ignored.
+- Added Installed apps and executable-path assignment support to both modes, with game-library folders still recognized as Game applications.
+- Manual mode selection overrides automatic detection until the foreground changes to a different assigned application.
+- Game and Work timers now keep independent paused state when modes change; only one watcher and countdown loop remains active.
+- Added visible Reset timer controls for both modes with separate Reset Timer, Reset Cycles, and confirmed Reset All actions.
+- Replaced the active-cycle number with independent, persistent completed-cycle counters. A counter increases exactly once after its session and break both finish.
+- Added authenticated, expiring reset requests and acknowledgements between the interface and watcher.
+- Hardened timer, counter, and history file replacement for Windows environments that reject atomic rename operations.
+- Updated focused regression coverage for foreground classification, reset isolation, timer recovery, and duplicate-cycle prevention.
+
+## 3.1.1 — 2026-10-04
+
+- Pause now freezes the active Game or Work timer at its exact remaining time, phase, and cycle instead of resetting it.
+- Enable resumes the frozen timer only when its matching game or work application is detected again.
+- The dashboard shows `Paused (Game)`, `Paused (Work)`, or `Paused (Break)` with the frozen `MM:SS` value while management is paused.
+- Installer refreshes preserve valid paused timer state, while normal game/app exit and disabling a timer still reset it.
+- Pausing while idle no longer forces the Windows power plan to Balanced when no managed session needs restoration.
+
+## 3.1.0 — 2026-10-04
+
+- Added interrupted-session recovery. After a watcher or Windows interruption, Game Management restores captured system settings and records eligible sessions once by session ID.
+- Added searchable session history with date, mode, application, duration, and timer-cycle columns.
+- Expanded Reports with weekly/monthly selection plus previous and next period navigation.
+- Added portable `.gmbak` export and restore for settings and session history. Restore accepts only the named local data entries and enforces size limits.
+- Added independent notification choices for timer popups, alarm sound, and end-of-session summaries; timers and history continue even when a notification is hidden.
+- Preserved the Windows 98 interface, AC-only Game behavior, Work/Game separation, two-minute history cutoff, and v3.0 data compatibility.
+
 ## 3.0.0 — 2026-09-29
 
 - Reworked status collection so power-plan, brightness, watcher, process, and activity-log checks run without freezing the interface.

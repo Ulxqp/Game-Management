@@ -11,8 +11,8 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyVersion("3.0.0.0")]
-[assembly: AssemblyFileVersion("3.0.0.0")]
+[assembly: AssemblyVersion("3.2.1.0")]
+[assembly: AssemblyFileVersion("3.2.1.0")]
 
 namespace GameManagementInstaller
 {
@@ -29,7 +29,9 @@ namespace GameManagementInstaller
             "Undo-GameManagement.ps1",
             "Uninstall-GameManagement.ps1",
             "Test-GameManagementSecurity.ps1",
+            "Test-GameManagementFeatures.ps1",
             "README.txt",
+            "CHANGELOG.md",
             "TEMPERATURE-GUIDE.md",
             "settings.json"
         };
@@ -143,7 +145,9 @@ namespace GameManagementInstaller
             foreach (string name in report.GpuNames) text.AppendLine("- " + name);
             text.AppendLine();
             text.AppendLine("The application does not change GPU clocks, voltages, drivers, firmware, or NVIDIA settings.");
-            File.WriteAllText(Path.Combine(installRoot, "HARDWARE-COMPATIBILITY.txt"), text.ToString(), Encoding.UTF8);
+            string reportFolder = Path.Combine(installRoot, "Documentation", "Reports");
+            Directory.CreateDirectory(reportFolder);
+            File.WriteAllText(Path.Combine(reportFolder, "HARDWARE-COMPATIBILITY.txt"), text.ToString(), Encoding.UTF8);
         }
 
         internal static bool RunSelfTest()
@@ -386,10 +390,13 @@ namespace GameManagementInstaller
             SetProgress(20, "Copying application files...");
             foreach (string name in Program.PayloadNames)
             {
-                string destination = Path.Combine(installRoot, name);
+                string destination = Path.Combine(installRoot, GetPayloadRelativePath(name));
                 if (string.Equals(name, "settings.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destination))
                     continue;
                 ExtractPayload(name, destination);
+                string legacyPath = Path.Combine(installRoot, name);
+                if (!string.Equals(legacyPath, destination, StringComparison.OrdinalIgnoreCase) && File.Exists(legacyPath))
+                    File.Delete(legacyPath);
             }
             HardwareCompatibility.WriteReport(installRoot, hardware);
 
@@ -413,6 +420,7 @@ namespace GameManagementInstaller
 
         private static void ExtractPayload(string name, string destination)
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
             using (Stream input = Program.OpenPayload(name))
             {
                 if (input == null) throw new InvalidDataException("Installer payload is missing: " + name);
@@ -422,6 +430,14 @@ namespace GameManagementInstaller
                 File.Copy(temporary, destination, true);
                 File.Delete(temporary);
             }
+        }
+
+        internal static string GetPayloadRelativePath(string name)
+        {
+            if (name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return Path.Combine("Source", name);
+            if (name.StartsWith("Test-", StringComparison.OrdinalIgnoreCase)) return Path.Combine("Tests", name);
+            if (name == "CHANGELOG.md" || name == "TEMPERATURE-GUIDE.md") return Path.Combine("Documentation", name);
+            return name;
         }
 
         private static void RunInstallerScript(string scriptPath)
@@ -476,7 +492,7 @@ namespace GameManagementInstaller
             {
                 if (key == null) throw new InvalidOperationException("Could not register uninstall support.");
                 key.SetValue("DisplayName", "Game Management");
-                key.SetValue("DisplayVersion", "3.0.0");
+                key.SetValue("DisplayVersion", "3.2.1");
                 key.SetValue("Publisher", "Game Management");
                 key.SetValue("InstallLocation", installRoot);
                 key.SetValue("DisplayIcon", iconPath);

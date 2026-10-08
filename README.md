@@ -9,6 +9,7 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 ## Features
 
 - Automatic game detection across selected installed applications, configured folders, and Steam libraries
+- Optional foreground-app switching between Game and Work modes, with a manual override
 - Whole-interface flip between Game Management and Work Management
 - Exact executable picker for user-selected work applications such as VS Code, Eclipse, or Chrome
 - Work focus sessions that do not apply gaming power, brightness, or Escape behavior
@@ -16,13 +17,20 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 - Dedicated Windows power plan with exact plan restoration
 - No game process-priority changes
 - Configurable gaming brightness with restoration
-- Repeating game/work and break timers with a visible, repeating alarm and cycle counting
+- Repeating game/work and break timers with a visible alarm and independent persistent completed-cycle counters
+- Per-mode Reset Timer, Reset Cycles, and confirmed Reset All controls
+- Pause/resume keeps the exact timer phase, cycle, and remaining time
+- Visible Resume and Pause controls in Work Mode use the same frozen-timer behavior
 - Consistent Windows 98 styling across the main window, timer alarm, session summary, and installer
 - Optional automatic Escape key at break start/end, sent only to the verified game window
 - Timer completion opens only the alarm dialog instead of bringing forward the dashboard
 - Live CPU/GPU temperatures, color conditions, and per-session temperature peaks
 - Read-only CPU-temperature integration with an already-running MSI Afterburner
 - Session history with mode, applications, date/time, duration, cycles, and CPU/GPU peaks
+- Searchable session history plus navigable weekly and monthly reports
+- Interrupted-session recovery with unique-ID protection against duplicate history entries
+- Portable `.gmbak` backup and restore for settings and session history
+- Independent choices for timer popups, timer sound, and end-of-session summaries
 - Sessions lasting exactly two minutes or less are ignored
 - Taskbar and notification-area controls
 - Low-overhead idle tray mode with full one-second temperature monitoring during games
@@ -32,7 +40,7 @@ Game Management is a Windows desktop game-and-work session utility with a delibe
 - Live timestamp-based `HH:MM:SS` Work Mode session timer
 - Independent Work focus and break timer settings and state; Game timer settings remain separate
 - Installed-application picker with recognizable names and icons in both Game and Work modes, plus manual executable browsing
-- Weekly Report with separate Game and Work totals, daily activity, and single-app time when recorded
+- Weekly and monthly Reports with separate Game and Work totals, daily activity, and single-app time when recorded
 - Animated Windows 98-style pixel-gerbera panel
 - Single-file graphical installer and registered uninstall support
 
@@ -45,6 +53,8 @@ Setup uses the current user's resolved Documents folder, falls back to a compati
 ## Install
 
 Download and run [`GameManagement-Setup.exe`](dist/GameManagement-Setup.exe). Windows may show an Unknown publisher warning because the executable is not digitally signed.
+
+The [v3.2.1 release](https://github.com/Ulxqp/Game-Management/releases/tag/v3.2.1) also provides a compressed application ZIP and SHA-256 checksums. Installed source, test scripts, and documentation use their own folders. Runtime files and personal data stay at their established paths. Release assets exclude personal logs, history, and timer state and are each smaller than 1 GB.
 
 The installer places the application in `Documents\GameManagement`, creates Desktop and Start Menu shortcuts, starts the watcher, and adds Game Management to Windows Installed Apps. Existing settings are preserved during upgrades.
 
@@ -60,14 +70,15 @@ On 64-bit Windows with .NET Framework 4 installed:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Build-GameManagement.ps1
 ```
 
-This compiles the AnyCPU application, runs the safety and RTX compatibility tests, and creates the single-file installer both one directory above the source folder and in `dist`.
+This compiles the AnyCPU application, runs the safety, feature, and RTX compatibility tests, and creates the single-file installer both one directory above the source folder and in `dist`.
 
 ## Verification
 
-The v3.0.0 package was checked on September 29, 2026. The existing Game and Work safety suite, installer payload, separate timer state, deterministic and immediately signaled mode switching, non-blocking status and sensor polling, background installed-app discovery, exact game-executable matching, and Weekly Report calculations were verified. Hidden idle operation avoids unnecessary sensor and display work; one-second temperature monitoring remains active during managed sessions and while the window is visible. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
+The v3.2.1 package was checked on October 8, 2026. Foreground assignment classification, automatic/manual mode switching, independent frozen timer state, Game/Work pause and resume, reset isolation, persistent completed-cycle counting, duplicate-cycle prevention, report calculations, and interrupted-session recovery were verified. Hidden idle operation avoids unnecessary sensor and display work; foreground detection uses one lightweight Windows API check per second. The watcher contains no process-priority controls, and MSI Afterburner CPU temperature access remains read-only.
 
 - AnyCPU application and installer compilation: **PASS**
-- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, and interface-alignment suite: **56/56 checks passed**
+- PowerShell safety, identity, sensor-access, portability, optimization, Game/Work isolation, timer persistence, recovery, backup, notifications, and interface-alignment suite: **65/65 checks passed**
+- Foreground classification, report/history, frozen-timer, reset-isolation, cycle-counting, and crash-recovery behavior suite: **15/15 checks passed**
 - Embedded installer payload verification: **PASS** (exit code 0)
 - RTX 20/30 compatibility classifier: **PASS** (exit code 0)
 - Non-installing setup-window render smoke test: **PASS** (exit code 0)
@@ -90,5 +101,6 @@ The classifier test covers representative RTX 2060, 2070 SUPER, 2080 Ti, 3050 La
 - `Undo-GameManagement.ps1` — full restoration helper
 - `Uninstall-GameManagement.ps1` — Windows uninstall workflow
 - `GameManagementSetup.cs` — single-file graphical installer
+- `Test-GameManagementFeatures.ps1` — local report, notification, rendering, and crash-recovery tests
 
 See [CHANGELOG.md](CHANGELOG.md) for update history.

@@ -46,6 +46,15 @@ function Restore-SavedPriorities($savedPriorities) {
     }
 }
 
+function Remove-UnlessPaused([string]$path) {
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    try {
+        $timer = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
+        if ([bool]$timer.Paused -and $null -ne $timer.RemainingSeconds) { return }
+    } catch {}
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+}
+
 if (-not (Test-Path -LiteralPath $backupPath)) {
     $activeLine = powercfg /getactivescheme
     $originalPowerScheme = if ($activeLine -match '([0-9a-fA-F-]{36})') { $Matches[1].ToLowerInvariant() } else { '381b4222-f694-41f0-9685-ff5bb260df2e' }
@@ -99,8 +108,8 @@ if ($runtimeState -and $null -ne $runtimeState.OriginalBrightness) {
 if ($runtimeState) { Restore-SavedPriorities @($runtimeState.OriginalPriorities) }
 Remove-Item -LiteralPath $legacyPriorityFlagPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $timerStatePath -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $workTimerStatePath -Force -ErrorAction SilentlyContinue
+Remove-UnlessPaused $timerStatePath
+Remove-UnlessPaused $workTimerStatePath
 
 $existingPlans = powercfg /list
 if (($existingPlans -join "`n") -notmatch [regex]::Escape($managementPlanGuid)) {
@@ -120,7 +129,8 @@ $powerCapabilities = [ordered]@{
 if (-not (Try-PowerCfg -Arguments @('/query', $managementPlanGuid))) {
     throw 'The Game Management power plan could not be verified.'
 }
-$compatibilityPath = Join-Path $root 'HARDWARE-COMPATIBILITY.txt'
+$compatibilityPath = Join-Path $root 'Documentation\Reports\HARDWARE-COMPATIBILITY.txt'
+[IO.Directory]::CreateDirectory((Split-Path -Parent $compatibilityPath)) | Out-Null
 Add-Content -LiteralPath $compatibilityPath -Encoding UTF8 -Value @(
     '',
     'Windows power-plan capabilities:',

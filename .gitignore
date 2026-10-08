@@ -7,6 +7,7 @@ priority-disabled.flag
 Legacy/
 *.setup-new
 /SECURITY-REPORT.md
+/FEATURE-TEST-REPORT.md
 /HARDWARE-COMPATIBILITY.txt
 /HARDWARE-COMPATIBILITY.txt
 /LIVE-TEST-REPORT.md
@@ -15,3 +16,14 @@ Legacy/
 /GameManagement.exe
 bin/
 obj/
+work-timer-state.json
+performance-state.json
+timer-counters.json
+timer-reset-request.json
+timer-reset-ack.json
+mode-switch-request.json
+mode-switch-ack.json
+/dist/*.zip
+/dist/SHA256SUMS.txt
+GameSessionHistory.txt
+last-session.json

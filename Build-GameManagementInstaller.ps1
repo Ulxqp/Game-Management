@@ -12,7 +12,9 @@ $payloads = @(
     'Undo-GameManagement.ps1',
     'Uninstall-GameManagement.ps1',
     'Test-GameManagementSecurity.ps1',
+    'Test-GameManagementFeatures.ps1',
     'README.txt',
+    'CHANGELOG.md',
     'TEMPERATURE-GUIDE.md',
     'settings.json'
 )

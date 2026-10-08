@@ -1,5 +1,12 @@
 param([string]$PackagePath = (Split-Path -Parent $MyInvocation.MyCommand.Path), [string]$ReportPath = (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'SECURITY-REPORT.md'))
 $ErrorActionPreference = 'Stop'
+if ((Split-Path -Leaf $PackagePath) -eq 'Tests') {
+    $PackagePath = Split-Path -Parent $PackagePath
+    if (-not $PSBoundParameters.ContainsKey('ReportPath')) {
+        $ReportPath = Join-Path $PackagePath 'Documentation\Reports\SECURITY-REPORT.md'
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $ReportPath)) | Out-Null
+    }
+}
 $checks = [Collections.Generic.List[object]]::new()
 function Add-Check([string]$Name,[bool]$Passed,[string]$Detail){$checks.Add([pscustomobject]@{Name=$Name;Passed=$Passed;Detail=$Detail})}
 $scripts=Get-ChildItem -LiteralPath $PackagePath -Filter '*.ps1'
@@ -14,7 +21,11 @@ Add-Check 'No network access' (@($network).Count -eq 0) 'No web, socket, downloa
 $hardware=[regex]::Matches($text,'LENOVO_GAMEZONE|SetSmartFan|SetFan|Fan_Set_Table|SetBIOS|OverClock|UnderVolt','IgnoreCase')|ForEach-Object Value|Sort-Object -Unique
 Add-Check 'No fan or firmware control' (@($hardware).Count -eq 0) 'Fan mode, firmware, BIOS, voltage, and clocks are untouched.'
 $watcher=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'GameManagement.ps1')
-$appSource=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'GameManagement.cs')
+$sourcePath=Join-Path $PackagePath 'GameManagement.cs'
+if (-not (Test-Path -LiteralPath $sourcePath)) { $sourcePath=Join-Path $PackagePath 'Source\GameManagement.cs' }
+$appSource=Get-Content -Raw -LiteralPath $sourcePath
+$pauseScript=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Pause-GameManagement.ps1')
+$installer=Get-Content -Raw -LiteralPath (Join-Path $PackagePath 'Install-GameManagement.ps1')
 $legacyNames = @('Hardware' + 'Squisher', 'Hardware' + ' Squisher', 'Game' + 'Boost')
 $legacyIdentityFound = $false
 foreach ($legacyName in $legacyNames) {
@@ -188,6 +199,21 @@ Add-Check 'Independent Work timer settings and state' (
     $watcher -match '\$script:gameTimerEnabled = if \(\$null -ne \$config.workTimerEnabled\)' -and
     $appSource -match 'if \(!settingsMap.ContainsKey\("workTimerEnabled"\)\) settings.workTimerEnabled = true'
 ) 'Work and Game use separate saved settings and timer-state files while sharing the countdown controller.'
+Add-Check 'Pause freezes and resumes timer state' (
+    $pauseScript -match 'function Freeze-TimerState' -and
+    $pauseScript -match 'RemainingSeconds' -and
+    $pauseScript -match 'NotePropertyName Paused' -and
+    $pauseScript -notmatch 'Remove-Item -LiteralPath \$timerStatePath -Force' -and
+    $pauseScript -notmatch 'Remove-Item -LiteralPath \$workTimerStatePath -Force' -and
+    $watcher -match '\$pausedTimer\.RemainingSeconds' -and
+    $watcher -match 'timerDeadline = \(Get-Date\)\.AddSeconds\(\$remainingSeconds\)' -and
+    $watcher -match 'function Remove-StaleTimerState' -and
+    $appSource -match 'ApplyPausedTimerDisplay' -and
+    $appSource -match 'Paused \(' -and
+    $appSource -match 'workResumeButton\.Click \+= delegate \{ EnableGameManagement\(\); \}' -and
+    $appSource -match 'workPauseButton\.Click \+= delegate \{ PauseGameManagement\(\); \}' -and
+    $installer -match 'function Remove-UnlessPaused'
+) 'Game and Work Pause store the phase, cycle, and remaining seconds; Resume preserves that state until the matching application returns, and the dashboard displays the frozen value.'
 Add-Check 'Installed app selection retains file browse' (
     $appSource -match 'InstalledAppsForm' -and
     $appSource -match 'App Paths' -and
@@ -225,6 +251,38 @@ Add-Check 'Weekly report from existing session history' (
     $appSource -match 'Mode' -and
     $appSource -match 'Applications'
 ) 'Weekly totals are split at midnight and week boundaries from recorded start/end times.'
+Add-Check 'Monthly reports and searchable history' (
+    $appSource -match 'BuildMonthly' -and
+    $appSource -match 'Session history' -and
+    $appSource -match 'searchBox\.TextChanged' -and
+    $appSource -match 'OrderByDescending\(item => item\.Start\)' -and
+    $appSource -match 'StringComparison\.OrdinalIgnoreCase'
+) 'Reports include weekly and monthly periods, and saved sessions can be filtered locally by date, mode, app, or duration.'
+Add-Check 'Portable data backup is bounded and local' (
+    $appSource -match 'GameManagement-Backup-' -and
+    $appSource -match 'backup-manifest\.json' -and
+    $appSource -match 'GameSessionHistory\.txt' -and
+    $appSource -match 'settingsEntry\.Length > 5 \* 1024 \* 1024' -and
+    $appSource -match 'historyEntry\.Length > 100 \* 1024 \* 1024' -and
+    $appSource -match 'previousSettings' -and
+    $appSource -match 'previousHistory' -and
+    $appSource -match 'File\.Exists\(engineEnabledPath\) \|\| IsWatcherRunning\(\)' -and
+    $appSource -notmatch 'ExtractToDirectory'
+) 'Backup and restore handle only named settings/history entries, require a fully paused engine, enforce size limits, roll back failed replacement, and never extract arbitrary archive paths.'
+Add-Check 'Configurable local notifications' (
+    $appSource -match 'timerPopupEnabled' -and
+    $appSource -match 'timerSoundEnabled' -and
+    $appSource -match 'sessionSummaryEnabled' -and
+    $appSource -match 'if \(!showPopup\)' -and
+    $watcher -match '\$script:sessionSummaryEnabled'
+) 'Timer popup, alarm sound, and end-of-session summary choices are local settings with safe enabled defaults.'
+Add-Check 'Interrupted session recovery' (
+    $watcher -match 'function Recover-InterruptedSession' -and
+    $watcher -match 'Write-GameSessionSummary \$false' -and
+    $watcher -match 'Recovered interrupted \$script:activeMode session' -and
+    $watcher -match 'if \(\$active\) \{ Stop-Management \$true \$false \}' -and
+    $watcher -match 'SessionId: \$currentSessionId'
+) 'Unexpected watcher shutdowns preserve eligible sessions without showing a stale popup, and SessionId prevents duplicate history entries.'
 Add-Check 'Read-only CPU and GPU temperatures' (
     $appSource -match 'performanceTimer\.Interval\s*=\s*1000' -and
     $appSource -match 'GetCPUTemp' -and
@@ -356,6 +414,37 @@ Add-Check 'Redirected Documents compatibility' (
     $undoScript -match '\[regex\]::Escape\(\$watcherPath\)' -and
     $installer -notmatch '\*Documents\\GameManagement\\GameManagement'
 ) 'Watcher cleanup uses the resolved installation path, including redirected or localized Documents folders.'
+Add-Check 'Foreground-only automatic mode detection' (
+    $appSource -match 'GetForegroundWindow' -and
+    $appSource -match 'GetWindowThreadProcessId' -and
+    $appSource -match 'ForegroundModeDetector\.Classify' -and
+    $appSource -match 'foregroundModeTimer\.Interval\s*=\s*1000' -and
+    $appSource -match 'automaticModeDetection' -and
+    $appSource -match 'manualOverridePath'
+) 'Automatic switching classifies only the active window once per second, ignores unassigned apps, and keeps a manual override until the foreground assignment changes.'
+Add-Check 'Authenticated timer reset channel' (
+    $appSource -match 'timer-reset-request\.json' -and
+    $appSource -match 'RequesterStartTicks' -and
+    $watcher -match 'Process-TimerResetRequest' -and
+    $watcher -match 'owner\.StartTime\.ToUniversalTime\(\)\.Ticks' -and
+    $watcher -match 'ExpiresUtc'
+) 'Timer reset commands are local, short-lived, tied to the requesting process instance, and acknowledged before the interface reports success.'
+Add-Check 'Independent persistent completed cycles' (
+    $watcher -match 'timer-counters\.json' -and
+    $watcher -match 'gameCompletedCycles' -and
+    $watcher -match 'workCompletedCycles' -and
+    $watcher -match '\$script:timerCycle\+\+' -and
+    $watcher -match 'Set-CompletedCycles \$script:activeMode \$script:timerCycle' -and
+    $watcher -match 'timerCycle - \[int\]\$script:sessionCycleStart' -and
+    $appSource -match 'Cycles done:'
+) 'Game and Work completed-cycle totals persist separately, increment at the end of a break, and session history records only the cycles completed during that session.'
+Add-Check 'Mode handoff preserves independent timers' (
+    $watcher -match 'Freeze-ActiveTimerState' -and
+    $watcher -match 'Stop-Management \$true \$false \$true' -and
+    $watcher -match 'Remove-StaleTimerState \$timerStatePath' -and
+    $watcher -match 'Remove-StaleTimerState \$workTimerStatePath' -and
+    $appSource -match 'RequestManagementMode'
+) 'A mode change freezes the outgoing mode, preserves both timer files, and starts only one replacement watcher.'
 $task=Get-ScheduledTask -TaskName 'Game Management' -ErrorAction SilentlyContinue
 Add-Check 'No elevated Game Management task' (-not [bool]$task) $(if($task){'An elevated task exists.'}else{'No elevated task is installed.'})
 $failed=@($checks|Where-Object{-not $_.Passed});$status=if($failed.Count -eq 0){'PASS'}else{'REVIEW REQUIRED'}
