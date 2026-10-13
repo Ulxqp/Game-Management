@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  color: #0f172a; background: #f8fafc; font-synthesis: none;
+  --background: 210 40% 98%; --foreground: 222 47% 11%; --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%; --border: 214 32% 91%; --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%; --destructive: 0 84% 60%;
+  --gm-bg: #f8fafc; --gm-surface: #ffffff; --gm-surface-muted: #f1f5f9;
+  --gm-border: #e2e8f0; --gm-divider: #edf2f7; --gm-text: #0f172a;
+  --gm-text-muted: #64748b; --gm-text-faint: #94a3b8; --gm-work: #2563eb;
+  --gm-work-soft: #dbeafe; --gm-game: #ef4444; --gm-game-soft: #fee2e2;
+  --gm-success: #16a34a; --gm-warning: #d97706; --gm-error: #dc2626;
+  --gm-focus: #93c5fd; --gm-space: 8px; --gm-card-radius: 14px; --gm-panel-radius: 16px;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+button, input, select { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+::selection { background: #bfdbfe; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: padding-box; background-color: #cbd5e1; }
+.gm-calendar { --rdp-accent-color: #2563eb; width: 100%; margin: 0; font-size: 11px; }
+.gm-calendar .rdp-month { width: 100%; }
+.gm-calendar .rdp-month_grid { width: 100%; table-layout: fixed; }
+.gm-calendar .rdp-month_caption { height: 32px; }
+.gm-calendar .rdp-caption_label { font-size: 15px; font-weight: 700; }
+.gm-calendar .rdp-nav { height: 32px; }
+.gm-calendar .rdp-button_previous, .gm-calendar .rdp-button_next { width: 30px; height: 30px; }
+.gm-calendar .rdp-chevron { width: 18px; height: 18px; }
+.gm-calendar .rdp-weekday { padding: 3px 0; font-size: 9px; }
+.gm-calendar .rdp-day { width: auto; height: 30px; }
+.gm-calendar .rdp-day_button { width: 28px; height: 28px; margin: auto; border-radius: 8px; font-size: 11px; }
+.gm-calendar .rdp-range_middle { background: #dbeafe; color: #1e40af; }
+.gm-calendar .rdp-selected .rdp-day_button { border: 0; background: #2563eb; color: #fff; }
+.gm-overlay-panel { transform-origin: left center; animation: gm-panel-in 200ms ease-out both; }
+.gm-overlay-column > .gm-calendar-tile:only-child { height: min(430px, calc(100vh - 92px)); min-height: 330px; }
+.gm-overlay-column > .gm-tasks-tile:only-child { height: min(470px, calc(100vh - 92px)); min-height: 300px; }
+@keyframes gm-panel-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 900px) {
+  header nav button { min-width: 62px !important; }
+  header nav button span:last-of-type { display: none; }
+  main > div > .grid-cols-3 { grid-template-columns: 1fr; }
+  main > div > .grid-cols-\[1fr_1\.15fr\], main > div > .grid-cols-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .gm-dashboard-bottom { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .gm-overlay-column { width: min(280px, calc(100vw - 68px)); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }

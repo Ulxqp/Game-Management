@@ -27,3 +27,13 @@ mode-switch-ack.json
 /dist/SHA256SUMS.txt
 GameSessionHistory.txt
 last-session.json
+game-session-state.json
+work-session-state.json
+/TIMER-LIFECYCLE-TEST-REPORT.md
+/test-output/
+/.qa-dialogs/
+/Backups/
+/GameManagement.Desktop.Preview.exe
+/frontend/node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo

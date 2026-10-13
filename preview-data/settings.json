@@ -1,0 +1,46 @@
+{
+  "pollSeconds": 3,
+  "gameBrightnessPercent": 75,
+  "gameTimerEnabled": true,
+  "gameTimerMinutes": 30,
+  "gameTimerSeconds": 1800,
+  "breakTimerSeconds": 300,
+  "workTimerSeconds": 1200,
+  "workBreakSeconds": 600,
+  "breakTimerMinutes": 5,
+  "workTimerEnabled": true,
+  "workTimerMinutes": 20,
+  "workBreakMinutes": 10,
+  "pauseGameWithEscape": true,
+  "gameApps": [
+    
+  ],
+  "gameFolders": [
+    "C:\\Program Files (x86)\\Steam\\steamapps\\common"
+  ],
+  "excludedProcesses": [
+    "steam",
+    "steamwebhelper",
+    "GameOverlayUI",
+    "crashreporter",
+    "dowser",
+    "UnityCrashHandler64",
+    "UnityCrashHandler32",
+    "unins000",
+    "setup",
+    "launcher",
+    "ModPostProcessor",
+    "ModPublisher",
+    "vswhere"
+  ],
+  "activeMode": "work",
+  "workApps": [
+    "C:\\Program Files\\7-Zip\\7zFM.exe",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+  ],
+  "timerPopupEnabled": true,
+  "timerSoundEnabled": true,
+  "customAlarmPath": "",
+  "sessionSummaryEnabled": true,
+  "automaticModeDetection": true
+}

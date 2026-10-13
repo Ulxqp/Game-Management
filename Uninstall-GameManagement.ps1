@@ -21,7 +21,7 @@ if (-not $Quiet) {
     if ($choice -ne [Windows.Forms.DialogResult]::Yes) { exit 0 }
 }
 
-Get-Process -Name 'GameManagement' -ErrorAction SilentlyContinue |
+Get-Process -Name 'GameManagement','GameManagement.Desktop' -ErrorAction SilentlyContinue |
     ForEach-Object {
         $_.Kill()
         [void]$_.WaitForExit(5000)
@@ -46,6 +46,15 @@ $ErrorActionPreference = 'SilentlyContinue'
 Wait-Process -Id $ParentProcessId -Timeout 15
 $programFiles = @(
     'GameManagement.exe',
+    'GameManagement.Desktop.exe',
+    'Microsoft.Web.WebView2.Core.dll',
+    'Microsoft.Web.WebView2.WinForms.dll',
+    'WebView2Loader.dll',
+    'Microsoft.Web.WebView2.LICENSE.txt',
+    'Microsoft.Web.WebView2.NOTICE.txt',
+    'frontend\dist\index.html',
+    'frontend\dist\assets\app.js',
+    'frontend\dist\assets\app.css',
     'GameManagement.ico',
     'GameManagement.ps1',
     'Install-GameManagement.ps1',
@@ -59,8 +68,11 @@ $programFiles = @(
     'Source\GameManagement.cs'
     'Tests\Test-GameManagementSecurity.ps1'
     'Tests\Test-GameManagementFeatures.ps1'
+    'Tests\Test-GameManagementTimerLifecycle.ps1'
     'Documentation\CHANGELOG.md'
     'Documentation\TEMPERATURE-GUIDE.md'
+    'Documentation\TIMER-STATE-GRAPH.md'
+    'Documentation\Reports\TIMER-LIFECYCLE-TEST-REPORT.md'
     'Documentation\Reports\SECURITY-REPORT.md'
     'Documentation\Reports\FEATURE-TEST-REPORT.md'
     'Documentation\Reports\HARDWARE-COMPATIBILITY.txt'
@@ -68,7 +80,7 @@ $programFiles = @(
 foreach ($name in $programFiles) {
     Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Force
 }
-foreach ($folder in @('Source','Tests','Documentation\Reports','Documentation')) {
+foreach ($folder in @('frontend\dist\assets','frontend\dist','frontend','Source','Tests','Documentation\Reports','Documentation')) {
     $path = Join-Path $InstallRoot $folder
     if ((Test-Path -LiteralPath $path) -and -not (Get-ChildItem -LiteralPath $path -Force)) {
         Remove-Item -LiteralPath $path -Force

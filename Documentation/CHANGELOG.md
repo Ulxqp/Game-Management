@@ -1,0 +1,393 @@
+# Game Management changelog
+
+## Unreleased
+
+No unreleased changes.
+
+## 5.0.2 — 2026-10-13
+
+- Fixed the Options page so its cards stack when a docked Calendar or Tasks panel narrows the workspace, and kept the long advanced-options button inside its card at compact widths.
+- Changed Calendar and Tasks so clicking their rail buttons docks them beside the main page and keeps them open; hover-only previews still float temporarily, and saved pins restore the docked layout.
+- Added a selectable local WAV alarm for Work and Game timers, including preview, default reset, a 25 MB local-file limit, looping while the alarm is visible, and automatic Windows-sound fallback.
+- Replaced generic application symbols with each selected executable's real Windows icon on Home and Applications, with safe fallbacks for missing icons and library folders; icon reads are restricted to saved application paths.
+- Consolidated Windows registration to one Game Management Start Menu entry pointing to the React desktop application. Upgrades remove the obsolete native-fallback shortcut while retaining `GameManagement.exe` in the install folder for recovery.
+- Prevented the React desktop from appearing frozen when a snapshot request stalls: automatic and manual refreshes now share one serialized poller with timeout, cancellation, recovery, stale-response protection, and a compact delayed-connection status; the loopback bridge now bounds network I/O and uses request-local JSON serializers.
+- Fixed the React countdown display jumping by two seconds by advancing a server-calibrated animation-frame clock, rendering only when the displayed second changes, and retaining a one-second snapshot fallback; the authoritative timer engine and saved state remain unchanged.
+- Replaced the permanent left sidebar with the approved 44px utility rail and independently opening, pinning, closing, and persisted Calendar/Tasks overlays without dashboard reflow.
+- Added Today, week-to-date, month-to-date, and custom calendar ranges with future dates blocked.
+- Rebuilt timer settings around hours, minutes, and seconds for Work, Work Break, Game, and Game Break, including dirty-state handling and safe discard confirmation.
+- Added confirmed application removal, sortable application columns, report period tabs, and real period-filtered charts.
+- Made dashboard controls honor the authoritative active backend mode, clarified active/ready/paused states, and displayed available current/peak CPU and GPU temperatures.
+- Hardened isolated preview mode so every live command, including opening the native application, is rejected.
+- Added persisted Version 1 panel preferences through the typed local bridge and keyboard navigation for the five-item top dock.
+- Made pause transactional end-to-end: callers no longer clear the engine marker before the backend has frozen state and restored managed settings successfully.
+- Exposed preserved Work/Game session checkpoints to React so paused elapsed time remains visible, and prevented an idle watcher from appearing as an active session.
+- Corrected report totals and charts to clip exact active segments across day, week, and month boundaries while retaining legacy history compatibility.
+- Replaced the duplicate native caption plus web header with one resizable Windows-style React title bar and working minimize, maximize/restore, close, drag, and edge-resize behavior.
+- Added executable React history regression tests for cross-midnight sessions, paused gaps, and legacy hour/minute records.
+- Made the embedded React/WebView2 desktop shell the default installed interface so the local app matches the approved Edge preview.
+- Added the desktop host, WebView2 runtime bindings, legal notices, and stable production frontend assets to installer and release packaging.
+- Kept the native Windows interface as an explicit fallback shortcut and preserved the native startup/watch service path.
+- Added packaging regression coverage and isolated-preview verification for the new launch path.
+
+## 5.0.2 — 2026-10-11
+
+- Imported the supplied Sol 5.6 Ultra instructions, complete specification and TARGET/CURRENT references into the existing project, preserving the approved timer-engine scope.
+- Corrected the native title/dock/caption dimensions and minimum-window collision, exact palette and focus tokens, card radii, metric icon holders, mode buttons and timer actions.
+- Replaced the Home settings paragraph with aligned duration and behavior groups; balanced the lower cards at 1:1.15 with range captions, numbered session rows and mode dots.
+- Refined the 44px utility rail and 280px overlays, task input, compact task rows, category badges, actions menu, progress bar and scaling-aware filter sizing.
+- Bound Resume/Pause availability on both dashboards to the existing authoritative watcher snapshot, with running/stopped regressions.
+- Extended isolated live previews with dimensions, mode/page/panel flags and a project-contained PreviewRoot for repeatable screenshot verification.
+
+## 5.0.1 — 2026-10-11
+
+- Audited every selected 21st.dev page through its Copy code workflow. Full `Usage.tsx` was available for all seven references; full `Component.tsx` was available for Calendar and Tasks, while five implementations were locked behind the site's paid Builder dialog. Exact dependencies, ports and limitations are recorded in COMPONENT-REFERENCES.md.
+- Researched all seven supplied 21st.dev references and recreated their visible patterns in the existing native Windows framework. No React, TypeScript, Tailwind or animation runtime is required.
+- Matched the supplied Home layout with a compact three-card statistics row, smaller timer, executable table, timer-settings summary and real session-statistics panel.
+- Stacked Calendar above Tasks in a single overlay column. Added remembered independent pins, settled preview captures and keyboard focus retention after task edits.
+- Connected calendar ranges to both Home statistics and Reports; session totals use recorded active intervals and exclude paused gaps.
+- Centralized icon cards, status badges, rounded table actions and confirmations. Added restrained hover/reveal transitions that follow Windows animation preferences.
+- Added explicit Save/Discard/Cancel and Remove/Keep confirmation actions. Kept topmost timer alarms, sound dismissal and existing notification deduplication.
+- Added pending Restore defaults and synchronized sound/time-up alert controls on Timer Settings. Preserved the existing timer rules; long-break scheduling and maximum-cycle limits remain outside this update.
+- Improved compact layouts and display scaling, added integration checks and updated component provenance/testing documentation.
+- Fixed the one-second modern dashboard refresh so it starts only after settings and UI bindings are ready, stops before teardown, and safely pauses if a dashboard control is detached. This resolves the reported `RefreshModernView()` null-reference dialog without changing timer-engine behavior.
+- Added the task source's Clear completed action with a native confirmation, while preserving open tasks and atomic local persistence.
+- Matched the retrieved calendar usage by disabling future dates and treating This Week and This Month as week-to-date and month-to-date report ranges.
+
+## 5.0.0 — 2026-10-11
+
+- Replaced the classic main layout with a Windows title bar and embedded, keyboard-accessible Home / Applications / Timer Settings / Reports / Options dock.
+- Added centralized colors, Segoe UI typography, 8px spacing, 40px actions, rounded cards, and shared Work/Game dashboard components.
+- Kept the existing watcher, exact-seconds timer calculations, active-time checkpoints, cycle accounting, foreground detection, power controls, brightness, temperature sensors, data paths, and compatible JSON settings.
+- Added Calendar and Tasks as independent overlays with a 48px rail, hover/focus access, delayed collapse, and separate pins. Calendar uses real monthly dates and date ranges. Tasks support categories, add/edit/complete/remove/undo, atomic storage, and recovery of malformed files.
+- Added executable search, discovery, folder selection, launch/location/remove actions, duplicate prevention, and explicit selection saving.
+- Added daily, weekly, monthly, custom, and all-time reports with active-time charts, searchable history, and CSV export.
+- Modernized alarm, reset, summary, application-discovery, and setup dialogs. Preserved existing topmost minimized-window alarms and sound dismissal.
+- Added pending-edit protection, work-timer save enablement, Windows border resizing/maximize, and isolated preview/render modes.
+- Added automated UI regressions alongside the original security, feature, and watcher lifecycle tests. See V5-TEST-REPORT.md and the baseline reports.
+
+## 3.3.0 — 2026-10-09
+
+- Added hours, minutes, and seconds for Game, Work, and both break timers (1 second to 24 hours).
+- Existing minute-based settings remain compatible; saving uses precise seconds.
+- Pause now preserves accumulated elapsed session time as well as the countdown. Resume continues the same session in both modes.
+- Recorded active intervals keep paused gaps out of session history and calendar reports.
+- Added a timer dependency/state graph and focused duration, pause/resume, and report regressions.
+- Hardened pause ownership, checkpoint failure handling, and stale-runtime recovery so an unsuccessful pause is not reported as completed.
+
+## 3.2.1 — 2026-10-08
+
+- Organized installations into Source, Tests, and Documentation folders while preserving runtime file locations and user data.
+- Added a compressed release package with default settings and no personal logs, history, or saved session state.
+
+- Added visible Resume and Pause buttons to Work Mode.
+- Work Mode Pause uses the same safe pause path as Game Mode, freezing the current Work/Break phase and exact remaining time.
+- Work Mode Resume continues the frozen countdown when the matching selected application is detected again.
+
+## 3.2.0 — 2026-10-08
+
+- Added optional automatic Game/Work switching based on the executable that owns the current foreground window. Unassigned and conflicting applications are ignored.
+- Added Installed apps and executable-path assignment support to both modes, with game-library folders still recognized as Game applications.
+- Manual mode selection overrides automatic detection until the foreground changes to a different assigned application.
+- Game and Work timers now keep independent paused state when modes change; only one watcher and countdown loop remains active.
+- Added visible Reset timer controls for both modes with separate Reset Timer, Reset Cycles, and confirmed Reset All actions.
+- Replaced the active-cycle number with independent, persistent completed-cycle counters. A counter increases exactly once after its session and break both finish.
+- Added authenticated, expiring reset requests and acknowledgements between the interface and watcher.
+- Hardened timer, counter, and history file replacement for Windows environments that reject atomic rename operations.
+- Updated focused regression coverage for foreground classification, reset isolation, timer recovery, and duplicate-cycle prevention.
+
+## 3.1.1 — 2026-10-04
+
+- Pause now freezes the active Game or Work timer at its exact remaining time, phase, and cycle instead of resetting it.
+- Enable resumes the frozen timer only when its matching game or work application is detected again.
+- The dashboard shows `Paused (Game)`, `Paused (Work)`, or `Paused (Break)` with the frozen `MM:SS` value while management is paused.
+- Installer refreshes preserve valid paused timer state, while normal game/app exit and disabling a timer still reset it.
+- Pausing while idle no longer forces the Windows power plan to Balanced when no managed session needs restoration.
+
+## 3.1.0 — 2026-10-04
+
+- Added interrupted-session recovery. After a watcher or Windows interruption, Game Management restores captured system settings and records eligible sessions once by session ID.
+- Added searchable session history with date, mode, application, duration, and timer-cycle columns.
+- Expanded Reports with weekly/monthly selection plus previous and next period navigation.
+- Added portable `.gmbak` export and restore for settings and session history. Restore accepts only the named local data entries and enforces size limits.
+- Added independent notification choices for timer popups, alarm sound, and end-of-session summaries; timers and history continue even when a notification is hidden.
+- Preserved the Windows 98 interface, AC-only Game behavior, Work/Game separation, two-minute history cutoff, and v3.0 data compatibility.
+
+## 3.0.0 — 2026-09-29
+
+- Reworked status collection so power-plan, brightness, watcher, process, and activity-log checks run without freezing the interface.
+- Settings saves, mode handoffs, Enable, Pause, and Windows-startup changes now run in the background while the interface clearly shows that a change is being applied.
+- Added stale-result protection so a delayed refresh from one mode cannot overwrite the newly selected Game or Work screen.
+- Installed-app discovery opens immediately, caches its results, and loads application icons progressively in the background.
+- Settings are replaced atomically, recent activity reads only a bounded tail of the log, and overlapping refreshes are coalesced to reduce disk, WMI, and process-query work.
+- Kept the Windows 98 interface, existing settings, Game/Work timers, session history, automatic AC-only behavior, and Weekly Report data compatible with v2 releases.
+
+## 2.3.3 — 2026-09-28
+
+- Mode switches and settings saves now wake the watcher immediately instead of waiting for the next 2–3 second scan.
+- CPU, GPU, Lenovo WMI, and NVIDIA temperature reads now run outside the interface thread, so slow sensors cannot delay button clicks or animations.
+- Overlapping temperature polls are skipped safely to prevent background work from accumulating.
+
+## 2.3.2 — 2026-09-28
+
+- Added the installed-application picker to Game Mode, alongside Browse file and Add folder.
+- Selected Game applications are matched by exact executable path, while existing library-folder and automatic Steam detection continue to work.
+- Game Mode shows selected applications and folders together with clear `[App]` and `[Folder]` labels.
+
+## 2.3.1 — 2026-09-27
+
+- Switching between Work and Game now asks the outgoing watcher to finish and save its active session before the new mode starts. A failed handoff keeps the old mode and settings.
+- Each screen reads only its own timer and runtime mode; a Work session can no longer make the Game tile appear active.
+- Intentional mode switches save eligible sessions without opening the end-of-session dialog. The two-minute history cutoff still applies.
+
+## 2.3.0 — 2026-09-27
+
+- Added independent Work focus and break timer settings with a separate Work timer state file. The Game timer settings and state remain unchanged.
+- Added an installed-application picker using Windows App Paths and Start Menu shortcuts, with names and icons where available. It omits obvious system/helper entries and shortcuts that require launch arguments. Manual executable browsing remains available.
+- Added a Launch selected button for configured Work apps, with missing-file handling.
+- Added a Weekly Report on both mode screens. It totals saved Game and Work sessions separately, splits sessions across midnight and week boundaries, and attributes time to individual apps only when a session lists one app.
+- Older history entries without a Mode field remain readable as Game sessions. Existing application paths and settings are preserved on upgrade.
+
+## 2.2.0 — 2026-09-23
+
+- Changed the existing per-user Windows sign-in entry to launch the single-instance Game Management application in its established hidden/tray mode, which then starts the watcher normally.
+- Kept automatic startup configurable through the existing **Start Game Management when I sign in** option and prevented watcher restarts or application upgrades from silently changing that choice or unpausing the watcher.
+- Added a live `HH:MM:SS` Work Mode session display backed by the shared session start timestamp, so UI delays do not cause timer drift.
+- Kept Game and Work sessions isolated through the existing single active-mode watcher lifecycle and shared timer/session state.
+- Corrected short-session logs and saved total-time labels so Work sessions are no longer described as Game sessions.
+
+## 2.1.0 — 2026-09-15
+
+- Added a whole-interface flip between Game Management and Work Management.
+- Placed the Work mode button immediately before Show activity.
+- Added an executable picker so only user-selected work apps are monitored.
+- Selected work apps use the focus and break timer while leaving gaming power, brightness, and Escape behavior off.
+- Work sessions use the existing two-minute history cutoff and record the selected applications and timer cycles.
+
+## 2.0.9
+
+- Made Recent activity hidden by default whenever Game Management starts.
+- The app now starts in its smaller window with a Show activity button.
+- Kept the activity panel available on demand without changing its contents or controls.
+- Changed timer completion so only the alarm dialog appears; the main window is no longer shown behind it.
+
+## 2.0.8
+
+- Stopped game sessions lasting exactly two minutes or less from being saved in `GameSessionHistory.txt`.
+- Short sessions no longer create or open a session summary when the game closes.
+- Added a simple log message explaining when a short session was skipped.
+
+## 2.0.7
+
+- Kept the Recent activity text area at its smaller, button-aligned height.
+- Shrunk the Recent activity section and the expanded window to remove the leftover gray space below it.
+- Kept the Windows 98 styling and all Game Management behavior unchanged.
+
+## 2.0.6
+
+- Removed the unused empty space below Recent activity by letting the text area fill the available group height.
+- Kept Open log aligned with the text area's top and aligned Diagnostics with its bottom.
+- Kept the group size, overall window size, Windows 98 styling, and all other controls unchanged.
+
+## 2.0.5
+
+- Adjusted the Recent activity text area to match the exact vertical span of the Open log and Diagnostics buttons.
+- Aligned the text area's top with Open log and its bottom with Diagnostics at every supported window size.
+- Kept the button sizes, Windows 98 styling, and the rest of the main interface unchanged.
+
+## 2.0.4
+
+- Fixed the existing interface reopening behind File Explorer where it looked like the EXE did nothing.
+- Reopened windows now briefly move above other windows, then return to normal non-topmost behavior.
+- Break screens remain topmost for the full break as intended, while strict single-instance protection remains enabled.
+
+## 2.0.3
+
+- Fixed repeated EXE launches failing to show an interface that was started hidden in the notification area.
+- Replaced hidden-window timer polling with a dedicated signal listener that safely posts show/hide requests to the Windows UI thread.
+- Kept strict single-instance protection: reopening the EXE shows the existing interface without creating another copy.
+
+## 2.0.2
+
+- Added strict single-instance protection for the main Game Management interface.
+- Opening Game Management again now shows and activates the existing window instead of starting a duplicate.
+- Kept timer-alert, session-summary, and preview windows independent so their intended dialogs still work.
+
+## 2.0.1
+
+- Disabled the timer **Confirm** button when the displayed timer settings already match the saved settings.
+- Made **Confirm** enable immediately when the game timer, break timer, or timer on/off setting changes.
+- Made **Confirm** return to its disabled state after either Confirm or Save settings successfully saves the values.
+
+## 2.0.0
+
+- Renamed the complete product identity to **Game Management**.
+- Renamed the application, watcher, scripts, installer, icon, previews, logs, shortcuts, startup entry, uninstall entry, internal namespace, signals, and power plan.
+- Changed the installation folder to `Documents\GameManagement` while preserving the existing settings, logs, history, and rollback backups during migration.
+- Kept all Game Management behavior, safety limits, and low-overhead monitoring unchanged.
+
+## 1.13.0
+
+- Reduced idle tray overhead by suspending temperature and timer-display polling when no game is active and the interface is hidden.
+- Reused process classifications between scans so unchanged background processes do not require repeated executable-path inspection.
+- Replaced routine WMI AC checks with the lightweight Windows power-status API while keeping WMI as a fallback.
+- Reduced idle brightness queries while still taking a fresh reading immediately before Game Management activates.
+- Combined the interface's duplicate active-power-plan lookups into one query per visible refresh.
+- Kept one-second CPU/GPU temperature updates during games and while the interface is visible.
+
+## 1.12.1
+
+- Moved the status indicator upward so it no longer overlaps the Mode row.
+- Kept the existing Windows 98 layout and all Game Management behavior unchanged.
+
+## 1.12.0
+
+- Changed the application's core description from game performance control to **Game Management**.
+- Removed automatic High and Above Normal process-priority changes from the watcher.
+- Removed the Stop priority / Start priority button and the priority-disabled runtime switch.
+- Kept AC-only power-plan performance, brightness control and restoration, game/break timers, targeted Escape, game detection, temperatures, session history, and crash cleanup.
+- Setup safely restores any legacy priority snapshot left by an older version, but the new application never raises a game process priority.
+
+## 1.11.0
+
+- Added a Windows 98-style **Stop priority** button beside Refresh.
+- Stop priority immediately restores the detected game's original process priority while keeping the power plan, brightness, timer, game detection, and temperature monitoring active.
+- A persistent safety switch prevents the watcher from silently setting High priority again.
+- The button changes to **Start priority**, which resumes automatic High priority on the next watcher scan.
+- Removed the unfinished Hide overlay / Show overlay button and its RTSS control code.
+- Exited game-process entries and SnowRunner's crash reporter are ignored so they cannot keep management mode or High priority active after the game closes.
+
+## 1.10.0
+
+- Added a read-only MSI Afterburner CPU-temperature source for systems whose Lenovo/Windows sensor interface is unavailable.
+- Reads only the official `MAHMSharedMemory` monitoring entry for CPU temperature; it cannot apply profiles or change clocks, voltage, power limits, fans, or thermal controls.
+- Validates the shared-memory signature, version, sizes, entry count, buffer bounds, source ID, and plausible temperature range before displaying a value.
+- Retains the existing Lenovo and Windows temperature fallbacks when MSI Afterburner is not running.
+
+## 1.9.3
+
+- Matched Hide activity to the exact width, height, and horizontal alignment of Open log and Diagnostics at every supported window size.
+- Kept all other main-interface controls unchanged.
+
+## 1.9.2
+
+- Replaced the secondary-dialog buttons' variable Windows focus border with a fixed Windows 98 raised/sunken border.
+- Buttons keep the same border thickness while idle, focused, and clicked; clicking still gives the normal inset pressed effect.
+- Kept the main interface unchanged.
+
+## 1.9.1
+
+- Restyled the timer alarm and game-session summary as consistent Windows 98 dialogs.
+- Added the same navy title bar, gray surface, raised frame, inset status areas, and classic beveled buttons used by the main interface.
+- Kept the main interface completely unchanged.
+- Added render checks for both secondary dialogs and a safety assertion that prevents either window from silently returning to modern styling.
+
+## 1.9.0
+
+- Replaced CPU/GPU workload percentages with live temperatures and per-session peak temperatures.
+- Added plain color conditions: green Safe, orange Warm, and red Danger, using conservative limits for this laptop's Intel Core i5-12450HX and RTX 3050 Laptop GPU.
+- Added safe sensor fallbacks. Unsupported or permission-blocked CPU temperature sensors show Unavailable instead of using a privileged hardware driver.
+- Session summaries and `GameSessionHistory.txt` now record peak temperatures in °C.
+- Removed the permanent heavy default-button outline from the session-summary Close button while keeping Escape-to-close support.
+- Added `TEMPERATURE-GUIDE.md` with the limits, meaning, and source links.
+
+## 1.8.0
+
+- Added an enabled-by-default option to press Escape on the detected game when a break starts and ends.
+- Escape input is target-verified: the watcher selects the detected game window, brings it forward, verifies focus, and cancels safely if focus fails.
+- The main Game Management interface now appears automatically at break start and hides to the notification area at break end.
+- Added live CPU and GPU usage with per-game-session peak percentages, refreshed every second. Replaced by temperature monitoring in 1.9.0.
+- Added a simple session summary when the final game process exits.
+- Added `GameSessionHistory.txt`, recording the game, date, start/end time, total game time, timer cycles, and peak CPU/GPU use.
+- Added safety checks for targeted Escape input, break-window signaling, live performance sampling, and session history.
+- Matched the Hide activity button height and border spacing to the other action buttons.
+
+## 1.7.0
+
+- Replaced the one-time timer chime with a topmost alarm that repeats until **Stop alarm** is pressed.
+- Rewrote the timer alerts in shorter, plain language: **Time for a break!** and **Break over!**
+- Added friendly duration formatting, including seconds for short test alarms.
+- Added safety checks that confirm the alarm timer stops and is disposed when the alert closes.
+- Included the application source with installed copies so the local safety test can inspect the alarm implementation.
+- Made package-only installer checks skip cleanly when the safety suite is run from the installed runtime folder.
+
+## 1.6.0
+
+- Added informational detection for NVIDIA GeForce RTX 20- and 30-series desktop, Ti, SUPER, and Laptop GPU names.
+- Added a non-mutating compatibility self-test to the installer build.
+- Made the AnyCPU installer adapt to optional power settings omitted by vendor firmware.
+- Added a Balanced-plan fallback when the standard High Performance template is unavailable.
+- Removed hardcoded watcher cleanup paths so redirected and localized Documents folders work correctly.
+- Added a per-install `HARDWARE-COMPATIBILITY.txt` report containing detected display adapters and applied power capabilities.
+- Confirmed GPU clocks, voltages, drivers, firmware, and NVIDIA settings remain untouched.
+- Updated the packaged installer in `dist` automatically after every verified build.
+
+## 1.5.0
+
+- Added a user-selectable 1-240 minute game timer, enabled at 30 minutes by default.
+- Starts the countdown when the first game launches and resets it when the final game closes.
+- Added a live timer display and a timer alert that works when the interface is closed.
+- Added a configurable break timer that automatically returns to a fresh game timer.
+- Added separate phase, minutes-left, and cycle-number readouts with smooth, flicker-free updates.
+- Added a raised, beveled Windows 98-style border around the application window.
+- Standardized the title-bar button widths and added a cosmetic Windows 98-style `?` button.
+- Replaced the application, taskbar, and notification-area artwork with the supplied pixel-art computer icon.
+- Added a single-file, retro-styled Windows installer with upgrade-safe settings, shortcuts, and registered uninstall support.
+- Added an explicit Windows system sound when either the game timer or break timer finishes.
+- Replaced the standalone countdown row with the cycle number and moved the live `MM:SS` value beside Minutes left.
+- Added a Confirm button that immediately saves and applies the selected game and break durations.
+- Added a Hide activity/Show activity button that collapses the log panel and resizes the window.
+- Reduced the timer Confirm control to the same standard height as the other buttons.
+- Renamed the Game settings panel to Settings.
+- Added a Windows 98-style panel flip between Current status and three animated pixel-art gerberas.
+- Removed the GERBERA.EXE status strip so the animated flower panel fills the available space.
+- Standardized the Open log and Diagnostics controls to the same 25-pixel height as the other buttons.
+
+## 1.4.0
+
+- Game Management now requires AC power and cannot activate while the laptop is unplugged.
+- Unplugging during a game immediately restores the original power plan, brightness, and process priorities.
+- Reconnecting AC while a game remains open allows a fresh, fully captured management session.
+- Added exact pre-activation process-priority capture and restoration.
+- Fixed the transient 0% brightness edge case by caching brightness while idle, before game launch transitions.
+- Extended interrupted-run, reinstall, and undo recovery to restore saved process priorities.
+- Added security checks for AC-only gating, full disable restoration, and stable brightness capture.
+
+## 1.3.0
+
+- Saves the built-in display brightness when a game starts and changes it to 75%.
+- Restores the exact pre-game brightness after the final game closes.
+- Includes brightness in interrupted-run recovery, reinstall recovery, and undo.
+- Leaves unsupported external monitors unchanged and logs when brightness control is unavailable.
+- Added a bounded brightness safety check to the security test.
+- Verified built-in display control and restoration with a reversible 75% → 74% → 75% test.
+
+## 1.2.0
+
+- Re-checks game process priority throughout the gaming session.
+- Reapplies High priority if a game resets itself to Normal during startup.
+- Verifies that High priority actually remained applied before logging success.
+- Uses Above Normal only as a safe fallback when High is unavailable.
+- Confirmed the dedicated plan uses 100% AC minimum/maximum CPU state, Aggressive processor boost, active cooling, and PCIe link-state power saving off.
+- Made reinstall idempotent: an active GameManagement plan is safely restored before setup, and an existing dedicated plan is updated instead of deleted.
+- Installer now fails clearly if any required `powercfg` operation fails.
+- Completed a real SnowRunner test: automatic activation, priority correction, and exact restoration to Balanced all passed.
+- Completed a second real-game test with The Witcher 3; activation, repeated priority correction, and exact restoration to Balanced all passed.
+- Added `LIVE-TEST-REPORT.md` with the observed timeline and final system condition.
+
+## 1.1.0
+
+- Removed all Lenovo fan and thermal-mode automation.
+- Normalized executable paths, including Steam paths containing `\.\`.
+- Added automatic discovery of every Steam library folder.
+- Added a named single-instance lock to prevent duplicate watchers.
+- Added active-plan verification after every power-plan switch.
+- Added startup, priority, activation, restoration, and recovery logs.
+- Kept generic folder detection with no per-game configuration.
+- Kept High priority with Above Normal fallback; Realtime is never used.
+- Kept exact restoration of the pre-game Windows power plan.
+
+## 1.0.0
+
+- Added generic Steam game detection and a dedicated Game Management power plan.
+- Added automatic activation, restoration, startup, backup, and undo.
